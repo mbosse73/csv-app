@@ -1,0 +1,2691 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CSV-Tool</title>
+<style>
+  :root {
+    --bg-app:#f4f5f7; --bg-panel:#ffffff; --bg-elevated:#ffffff;
+    --bg-hover:#eef0f3; --bg-active:#e6eaf0;
+    --bg-selected:#dbe7ff; --bg-selected-strong:#b9d1ff;
+    --bg-header:#f7f8fa; --bg-header-sel:#cfe0ff; --bg-header-filtered:#fff4d6;
+    --border:#e3e6ea; --border-strong:#cbd0d7;
+    --text:#1c2330; --text-muted:#5b6573; --text-soft:#8590a0;
+    --accent:#2f6feb; --accent-hover:#1e5bd6; --accent-soft:#dbe7ff;
+    --accent-strong:#1a4fbf;
+    --type-num:#0a7d4f; --type-date:#a05a00; --type-text:#5b6573;
+    --danger:#dc3545; --warning:#f59e0b; --success:#2f9e44;
+    --shadow-sm:0 1px 2px rgba(15,23,42,.05);
+    --shadow-md:0 4px 14px rgba(15,23,42,.09);
+    --shadow-lg:0 10px 30px rgba(15,23,42,.14);
+    --radius:8px; --radius-sm:5px; --radius-lg:12px;
+    --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --row-h:28px;
+    --t-fast:.12s;
+    --bg-group:#eef3fb; --bg-group-hover:#e0e9f7;
+    --bg-frozen:#fbfaf5;
+  }
+  [data-theme="dark"] {
+    --bg-app:#0e1218; --bg-panel:#171c25; --bg-elevated:#1e2531;
+    --bg-hover:#242c3a; --bg-active:#2c354a;
+    --bg-selected:#2a3a5c; --bg-selected-strong:#3a5587;
+    --bg-header:#1a2029; --bg-header-sel:#2e4470; --bg-header-filtered:#3d3520;
+    --border:#252b37; --border-strong:#363d4d;
+    --text:#e8eaee; --text-muted:#9aa4b2; --text-soft:#6b7484;
+    --accent:#5b9aff; --accent-hover:#7eb1ff; --accent-soft:#1e3358;
+    --accent-strong:#3d7ee0;
+    --type-num:#4ade80; --type-date:#fbbf24; --type-text:#9aa4b2;
+    --danger:#ef5350; --warning:#fbbf24; --success:#51cf66;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 4px 14px rgba(0,0,0,.4);
+    --shadow-lg:0 10px 30px rgba(0,0,0,.5);
+    --bg-group:#1f2a3d; --bg-group-hover:#26334a;
+    --bg-frozen:#1e2029;
+  }
+  *,*::before,*::after { box-sizing:border-box; }
+  html,body { margin:0; padding:0; height:100%; font-family:var(--sans); background:var(--bg-app); color:var(--text); font-size:13.5px; line-height:1.45; -webkit-font-smoothing:antialiased; }
+  button { font-family:inherit; cursor:pointer; }
+  input,select { font-family:inherit; color:inherit; }
+  kbd { font-family:var(--mono); font-size:11px; padding:1px 5px; background:var(--bg-elevated); border:1px solid var(--border); border-bottom-width:2px; border-radius:3px; color:var(--text-muted); }
+
+  .app { display:grid; grid-template-rows:auto 1fr; height:100vh; overflow:hidden; }
+
+  /* Top bar */
+  .topbar { display:flex; align-items:center; gap:4px; padding:8px 12px; background:var(--bg-panel); border-bottom:1px solid var(--border); flex-wrap:wrap; z-index:10; }
+  .brand { display:flex; align-items:center; gap:8px; font-weight:600; padding-right:10px; margin-right:6px; border-right:1px solid var(--border); height:30px; }
+  .brand svg { color:var(--accent); }
+  .brand span { font-size:14px; }
+  .tb-group { display:flex; align-items:center; gap:2px; padding:0 6px; height:30px; border-right:1px solid var(--border); }
+  .tb-group:last-of-type { border-right:none; }
+  .tb-btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:5px 9px; height:28px; background:transparent; color:var(--text); border:1px solid transparent; border-radius:5px; font-size:12.5px; font-weight:500; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
+  .tb-btn:hover:not(:disabled) { background:var(--bg-hover); }
+  .tb-btn:active:not(:disabled) { background:var(--bg-active); }
+  .tb-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .tb-btn.primary { background:var(--accent); color:#fff; }
+  .tb-btn.primary:hover:not(:disabled) { background:var(--accent-hover); }
+  .tb-btn.icon { width:28px; padding:0; }
+  .tb-btn.danger { color:var(--danger); }
+  .tb-btn svg { flex-shrink:0; }
+  .tb-spacer { flex:1; }
+  .tb-search { position:relative; width:240px; height:28px; }
+  .tb-search input { width:100%; height:100%; padding:0 64px 0 28px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:5px; outline:none; font-size:13px; transition:border-color var(--t-fast), box-shadow var(--t-fast); color:inherit;}
+  .tb-search input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .tb-search .ico { position:absolute; left:8px; top:50%; transform:translateY(-50%); color:var(--text-soft); pointer-events:none; }
+  .tb-search .nav { position:absolute; right:4px; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:1px; color:var(--text-muted); font-size:11px; font-family:var(--mono); }
+  .tb-search .nav button { background:transparent; border:none; color:var(--text-soft); padding:2px 4px; border-radius:3px; cursor:pointer; }
+  .tb-search .nav button:hover { background:var(--bg-hover); color:var(--text); }
+  .tb-search .nav .count { padding:0 4px; min-width:42px; text-align:center; }
+
+  /* Workspace */
+  .workspace { display:grid; grid-template-rows:1fr auto; overflow:hidden; min-height:0; }
+  .work-area { position:relative; overflow:hidden; min-height:0; display:flex; flex-direction:column; }
+
+  .empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px; text-align:center; color:var(--text-muted); }
+  .empty-state .dropzone { border:2px dashed var(--border-strong); border-radius:var(--radius-lg); padding:50px 70px; background:var(--bg-panel); transition:border-color var(--t-fast), background var(--t-fast); max-width:520px; }
+  .empty-state .dropzone.dragover { border-color:var(--accent); background:var(--accent-soft); }
+  .empty-state .ico { color:var(--accent); margin-bottom:16px; }
+  .empty-state h2 { margin:0 0 8px; color:var(--text); font-weight:600; font-size:18px; }
+  .empty-state p { margin:0 0 18px; }
+  .empty-state .recent { margin-top:18px; font-size:12px; color:var(--text-soft); }
+
+  .loading { position:absolute; inset:0; background:rgba(255,255,255,.85); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:50; backdrop-filter:blur(2px); }
+  [data-theme="dark"] .loading { background:rgba(14,18,24,.85); }
+  .loading.show { display:flex; }
+  .loading .spinner { width:38px; height:38px; border:3px solid var(--accent-soft); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading .label { margin-top:14px; color:var(--text); font-weight:500; }
+  .loading .sub { color:var(--text-muted); font-size:12px; margin-top:4px; }
+
+  /* Table */
+  .table-host { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; margin:10px 12px; background:var(--bg-panel); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-sm); }
+  .grid-scroller { flex:1; overflow:auto; position:relative; outline:none; }
+  .grid-sizer { position:relative; }
+  .grid-header-row { position:sticky; top:0; z-index:6; display:flex; background:var(--bg-header); border-bottom:1px solid var(--border-strong); height:34px; }
+  .grid-rows { position:absolute; left:0; right:0; }
+  .grid-row { display:flex; position:absolute; left:0; right:0; height:var(--row-h); }
+  .grid-row.alt { background:rgba(127,127,127,.025); }
+  .grid-row:hover .gcell:not(.selected):not(.row-idx) { background:var(--bg-hover); }
+  .grid-row.row-selected { background:var(--bg-selected); }
+
+  .gcell, .ghead { box-sizing:border-box; padding:5px 8px; border-right:1px solid var(--border); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; position:relative; font-size:12.5px; }
+  .gcell { cursor:cell; }
+  .gcell.editing { white-space:normal; padding:0; cursor:text; background:var(--bg-panel); box-shadow:inset 0 0 0 2px var(--accent); z-index:7; overflow:visible; }
+  .gcell.editing .editor { width:100%; min-height:100%; padding:5px 8px; outline:none; border:none; background:transparent; color:inherit; font:inherit; resize:none; text-align:left; }
+  .gcell.selected { background:var(--bg-selected); }
+  .gcell.active { box-shadow:inset 0 0 0 2px var(--accent); z-index:3; }
+  .gcell.search-hit { background:rgba(245,158,11,.18); }
+  .gcell.search-hit.current { background:rgba(245,158,11,.4); }
+  .gcell.row-idx { background:var(--bg-header); color:var(--text-soft); text-align:right; font-variant-numeric:tabular-nums; font-size:11.5px; cursor:pointer; user-select:none; border-right:1px solid var(--border-strong); }
+  .grid-row.row-selected .gcell.row-idx { background:var(--bg-header-sel); color:var(--text); font-weight:600; }
+  .gcell.pinned, .ghead.pinned { position:sticky; z-index:5; background:var(--bg-panel); border-right:1px solid var(--border-strong); }
+  .ghead.pinned { background:var(--bg-header); z-index:7; }
+  .grid-row.row-selected .gcell.pinned { background:var(--bg-selected); }
+
+  /* Column-Type aware alignment */
+  .gcell.t-number { text-align:right; font-variant-numeric:tabular-nums; }
+  .gcell.t-date { text-align:right; font-variant-numeric:tabular-nums; color:var(--text); }
+  .gcell.t-text { text-align:left; }
+
+  /* Header */
+  .ghead { display:flex; align-items:center; gap:4px; padding:6px 6px 6px 8px; background:var(--bg-header); border-right:1px solid var(--border); font-weight:600; color:var(--text); user-select:none; height:100%; }
+  .ghead.row-idx { padding:6px 8px; justify-content:flex-end; }
+  .ghead .type-ico { color:var(--text-soft); flex-shrink:0; display:inline-flex; align-items:center; }
+  .ghead .type-ico.t-number { color:var(--type-num); }
+  .ghead .type-ico.t-date { color:var(--type-date); }
+  .ghead .lbl { flex:1; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+  .ghead .lbl[contenteditable="true"] { background:var(--bg-panel); outline:1px solid var(--accent); border-radius:3px; padding:1px 4px; }
+  .ghead .sort { color:var(--text-soft); font-size:10px; width:10px; flex-shrink:0; }
+  .ghead .sort.active { color:var(--accent); }
+  .ghead .filt-btn, .ghead .col-mn { background:transparent; border:none; padding:1px 3px; color:var(--text-soft); border-radius:3px; cursor:pointer; font-size:10px; display:inline-flex; align-items:center; }
+  .ghead .filt-btn:hover, .ghead .col-mn:hover { background:var(--bg-hover); color:var(--text); }
+  .ghead .filt-btn.active { color:var(--warning); }
+  .ghead.selected { background:var(--bg-header-sel); }
+  .ghead.filtered { background:var(--bg-header-filtered); }
+  .ghead.filtered.selected { background:linear-gradient(135deg, var(--bg-header-sel) 50%, var(--bg-header-filtered) 50%); }
+  .ghead .resz { position:absolute; top:0; right:-3px; width:6px; height:100%; cursor:col-resize; z-index:8; }
+  .ghead .resz:hover, .ghead .resz.active { background:var(--accent); opacity:.5; }
+
+  .gcell.hidden-after::after, .ghead.hidden-after::after { content:""; position:absolute; right:-1px; top:0; bottom:0; width:2px; background:repeating-linear-gradient(180deg, var(--accent) 0 4px, transparent 4px 8px); }
+
+  .fill-handle { position:absolute; width:8px; height:8px; background:var(--accent); border:1.5px solid var(--bg-panel); border-radius:1px; cursor:crosshair; z-index:9; pointer-events:auto; box-shadow:0 0 0 1px var(--accent); }
+  .gcell.fill-preview { box-shadow:inset 0 0 0 1px var(--accent); }
+  .row-drop-line { position:absolute; left:0; right:0; height:2px; background:var(--accent); z-index:8; pointer-events:none; }
+
+  /* Frozen rows */
+  .grid-frozen-rows { position:sticky; z-index:5; background:var(--bg-frozen); border-bottom:2px solid var(--accent); }
+  .grid-frozen-rows .grid-row { background:var(--bg-frozen); }
+  .grid-frozen-rows .grid-row.alt { background:var(--bg-frozen); }
+  .grid-frozen-rows .gcell.row-idx { background:var(--bg-frozen); font-weight:600; color:var(--accent); }
+
+  /* Group header rows */
+  .grid-row.group-header { background:var(--bg-group); cursor:pointer; user-select:none; align-items:center; z-index:2; }
+  .grid-row.group-header:hover { background:var(--bg-group-hover); }
+  .grid-row.group-header .gcell { background:transparent; border-right:none; font-weight:600; color:var(--text); }
+  .grid-row.group-header .gh-caret { display:inline-block; width:12px; margin-right:4px; color:var(--accent); font-family:var(--mono); font-size:11px; }
+  .grid-row.group-header .gh-value { color:var(--text); }
+  .grid-row.group-header .gh-count { color:var(--text-soft); font-weight:400; margin-left:8px; font-size:11.5px; }
+
+  /* Search-Replace modal */
+  .sr-modal .sr-grid { display:grid; grid-template-columns:auto 1fr; gap:8px 12px; align-items:center; }
+  .sr-modal .sr-grid label { color:var(--text-muted); font-size:12.5px; }
+  .sr-modal .sr-grid input[type="text"] { padding:6px 9px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:5px; color:var(--text); outline:none; font-size:13px; }
+  .sr-modal .sr-grid input[type="text"]:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .sr-modal .sr-opts { display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:12px; }
+  .sr-modal .sr-opts label { display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text); cursor:pointer; }
+  .sr-modal .sr-preview { margin-top:14px; padding:8px 10px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:5px; max-height:200px; overflow:auto; font-size:12px; font-family:var(--mono); }
+  .sr-modal .sr-preview .row { display:grid; grid-template-columns:60px 1fr 16px 1fr; gap:6px; padding:2px 0; align-items:center; }
+  .sr-modal .sr-preview .row .cell-loc { color:var(--text-soft); }
+  .sr-modal .sr-preview .row .cell-old { color:var(--danger); text-decoration:line-through; }
+  .sr-modal .sr-preview .row .cell-arrow { color:var(--text-soft); }
+  .sr-modal .sr-preview .row .cell-new { color:var(--success); }
+  .sr-modal .sr-preview .empty { color:var(--text-soft); text-align:center; padding:8px; }
+  .sr-modal .sr-actions { display:flex; gap:8px; margin-top:14px; justify-content:flex-end; }
+  .sr-modal .sr-actions .info { flex:1; color:var(--text-muted); font-size:12px; align-self:center; }
+  .sr-modal .sr-error { color:var(--danger); font-size:12px; margin-top:6px; min-height:16px; }
+
+  /* Status */
+  .status-bar { padding:5px 14px; background:var(--bg-panel); border-top:1px solid var(--border); font-size:11.5px; color:var(--text-muted); display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .status-bar .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--success); margin-right:6px; vertical-align:middle; }
+  .status-bar .sep { width:1px; height:14px; background:var(--border); }
+  .status-bar .stat-num { color:var(--text); font-variant-numeric:tabular-nums; }
+  .status-bar .filters-chip { color:var(--warning); cursor:pointer; }
+  .status-bar .filters-chip:hover { text-decoration:underline; }
+
+  /* Context menu */
+  .ctx-menu, .menu-pop { position:fixed; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); box-shadow:var(--shadow-md); padding:5px; min-width:220px; z-index:1000; font-size:13px; }
+  .ctx-menu .it, .menu-pop .it { padding:6px 10px; border-radius:4px; cursor:pointer; display:flex; justify-content:space-between; gap:14px; color:var(--text); align-items:center; }
+  .ctx-menu .it:hover, .menu-pop .it:hover { background:var(--bg-hover); }
+  .ctx-menu .it.danger, .menu-pop .it.danger { color:var(--danger); }
+  .ctx-menu .it .sc, .menu-pop .it .sc { color:var(--text-soft); font-size:11px; font-family:var(--mono); }
+  .ctx-menu .divider, .menu-pop .divider { height:1px; background:var(--border); margin:4px 2px; }
+  .menu-pop label.it { cursor:pointer; }
+  .menu-pop label.it input[type="radio"], .menu-pop label.it input[type="checkbox"] { margin-right:6px; }
+  .menu-pop .subhead { padding:6px 10px; font-size:10.5px; color:var(--text-soft); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
+  .menu-pop .it .check { color:var(--accent); width:12px; display:inline-flex; }
+
+  /* Filter popup */
+  .filter-pop { position:fixed; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-lg); z-index:1100; width:280px; max-height:480px; display:flex; flex-direction:column; overflow:hidden; }
+  .filter-pop .fp-head { padding:8px 10px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; }
+  .filter-pop .fp-head .title { flex:1; font-weight:600; font-size:13px; }
+  .filter-pop .fp-sort { padding:6px 10px; border-bottom:1px solid var(--border); display:flex; gap:6px; }
+  .filter-pop .fp-sort button { flex:1; padding:5px 8px; border:1px solid var(--border); background:var(--bg-panel); color:var(--text); border-radius:4px; font-size:12px; cursor:pointer; }
+  .filter-pop .fp-sort button:hover { background:var(--bg-hover); }
+  .filter-pop .fp-sort button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .filter-pop .fp-range { padding:8px 10px; border-bottom:1px solid var(--border); display:none; }
+  .filter-pop .fp-range.show { display:block; }
+  .filter-pop .fp-range .row { display:flex; gap:6px; align-items:center; margin-bottom:5px; }
+  .filter-pop .fp-range .row:last-child { margin-bottom:0; }
+  .filter-pop .fp-range label { font-size:11px; color:var(--text-muted); width:30px; }
+  .filter-pop .fp-range input { flex:1; padding:4px 7px; background:var(--bg-panel); border:1px solid var(--border); border-radius:4px; color:var(--text); font-size:12px; outline:none; }
+  .filter-pop .fp-range input:focus { border-color:var(--accent); }
+  .filter-pop .fp-search { padding:8px 10px; border-bottom:1px solid var(--border); }
+  .filter-pop .fp-search input { width:100%; padding:5px 8px; background:var(--bg-panel); border:1px solid var(--border); border-radius:4px; outline:none; font-size:12px; color:inherit;}
+  .filter-pop .fp-search input:focus { border-color:var(--accent); }
+  .filter-pop .fp-list { flex:1; overflow-y:auto; padding:4px; }
+  .filter-pop .fp-list .it { display:flex; align-items:center; gap:7px; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12.5px; }
+  .filter-pop .fp-list .it:hover { background:var(--bg-hover); }
+  .filter-pop .fp-list .it input { margin:0; flex-shrink:0; }
+  .filter-pop .fp-list .it .v { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .filter-pop .fp-list .it .v.empty-v { color:var(--text-soft); font-style:italic; }
+  .filter-pop .fp-list .it .cnt { color:var(--text-soft); font-size:11px; font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .filter-pop .fp-list .it.master { font-weight:600; border-bottom:1px solid var(--border); margin-bottom:2px; padding-bottom:6px; }
+  .filter-pop .fp-foot { padding:8px 10px; border-top:1px solid var(--border); display:flex; gap:6px; }
+  .filter-pop .fp-foot button { flex:1; padding:6px 8px; border:1px solid var(--border); background:var(--bg-panel); color:var(--text); border-radius:4px; font-size:12px; cursor:pointer; }
+  .filter-pop .fp-foot button:hover { background:var(--bg-hover); }
+  .filter-pop .fp-foot button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .filter-pop .fp-foot button.primary:hover { background:var(--accent-hover); }
+  .filter-pop .fp-foot button.danger { color:var(--danger); }
+  .filter-pop .fp-tabs { display:flex; padding:6px 10px 0; gap:4px; border-bottom:1px solid var(--border); }
+  .filter-pop .fp-tabs button { padding:5px 10px; border:1px solid var(--border); border-bottom:none; background:var(--bg-panel); color:var(--text); border-radius:4px 4px 0 0; font-size:12px; cursor:pointer; }
+  .filter-pop .fp-tabs button.active { background:var(--bg-elevated); border-color:var(--border-strong); }
+
+  /* Toast */
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-elevated); color:var(--text); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:var(--radius-sm); padding:9px 14px; box-shadow:var(--shadow-lg); font-size:13px; opacity:0; transition:opacity .2s, transform .2s; pointer-events:none; z-index:2000; }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.error { border-left-color:var(--danger); }
+  .toast.success { border-left-color:var(--success); }
+  .toast.warn { border-left-color:var(--warning); }
+
+  /* Modal */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:1500; display:none; align-items:center; justify-content:center; }
+  .modal-bg.show { display:flex; }
+  .modal { background:var(--bg-panel); border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:20px 22px; max-width:560px; width:90%; max-height:80vh; overflow:auto; }
+  .modal h3 { margin:0 0 12px; font-size:16px; }
+  .modal .kbd-grid { display:grid; grid-template-columns:1fr auto; gap:6px 18px; font-size:13px; }
+  .modal .kbd-grid .lbl { color:var(--text-muted); }
+  .modal .close-row { display:flex; justify-content:flex-end; margin-top:16px; }
+
+  ::-webkit-scrollbar { width:11px; height:11px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:6px; border:2px solid var(--bg-panel); }
+  ::-webkit-scrollbar-thumb:hover { background:var(--text-soft); }
+
+  @media (max-width:760px) {
+    .brand span, .tb-btn span:not(.sc) { display:none; }
+    .tb-search { width:140px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+      <span>CSV-Tool</span>
+    </div>
+
+    <div class="tb-group">
+      <button class="tb-btn primary" id="btn-open" title="CSV-Datei öffnen (Strg+O)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Öffnen</span>
+      </button>
+      <button class="tb-btn" id="btn-new"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Neu</span></button>
+      <button class="tb-btn" id="btn-export" title="Exportieren (Strg+S = CSV)" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Export</span><span style="margin-left:2px; font-size:9px; color:var(--text-soft)">▾</span></button>
+      <input type="file" id="file-input" accept=".csv,.tsv,.txt" style="display:none" />
+    </div>
+
+    <div class="tb-group">
+      <button class="tb-btn icon" id="btn-undo" title="Rückgängig (Strg+Z)" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7L3 9"/></svg></button>
+      <button class="tb-btn icon" id="btn-redo" title="Wiederherstellen (Strg+Y)" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-7l3 3"/></svg></button>
+      <span style="width:8px"></span>
+      <button class="tb-btn icon" id="btn-copy" title="Kopieren (Strg+C)" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+      <button class="tb-btn icon" id="btn-cut" title="Ausschneiden (Strg+X)" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></button>
+      <button class="tb-btn icon" id="btn-paste" title="Einfügen (Strg+V)" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></button>
+    </div>
+
+    <div class="tb-group">
+      <button class="tb-btn icon" id="btn-add-row" title="Zeile hinzufügen" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg></button>
+      <button class="tb-btn icon" id="btn-add-col" title="Spalte hinzufügen" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="18" y1="12" x2="12" y2="12"/><line x1="15" y1="9" x2="15" y2="15"/></svg></button>
+      <button class="tb-btn icon" id="btn-replace" title="Suchen & Ersetzen (Strg+H)" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4L10 14"/><path d="M10 20H4v-6"/><path d="M4 20l10-10"/></svg></button>
+    </div>
+
+    <div class="tb-group">
+      <button class="tb-btn" id="btn-view" title="Ansicht: Gruppieren, Einfrieren, Zeilenhöhe" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3h18"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M3 21h18"/></svg><span>Ansicht</span><span style="margin-left:2px; font-size:9px; color:var(--text-soft)">▾</span></button>
+    </div>
+
+    <div class="tb-group">
+      <button class="tb-btn" id="btn-opts" title="Optionen"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Optionen</span></button>
+      <button class="tb-btn" id="btn-clear-filters" title="Alle Filter zurücksetzen" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/><line x1="3" y1="3" x2="21" y2="21"/></svg><span>Filter löschen</span></button>
+    </div>
+
+    <div class="tb-spacer"></div>
+
+    <div class="tb-group">
+      <div class="tb-search" id="tb-search">
+        <svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-input" placeholder="Suchen…" />
+        <div class="nav" id="search-nav" style="display:none">
+          <span class="count" id="search-count">0/0</span>
+          <button id="search-prev" title="Vorheriger Treffer">▲</button>
+          <button id="search-next" title="Nächster Treffer">▼</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tb-group">
+      <button class="tb-btn icon" id="btn-help" title="Tastenkürzel (?)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
+      <button class="tb-btn icon" id="btn-theme" title="Modus wechseln"><svg id="theme-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <div class="work-area">
+      <div class="empty-state" id="empty-state">
+        <div class="dropzone" id="dropzone">
+          <svg class="ico" width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <h2>CSV-Datei laden</h2>
+          <p>Ziehen Sie eine Datei hierher oder klicken Sie auf <strong>„Öffnen"</strong>.</p>
+          <button class="tb-btn primary" id="dropzone-btn" style="padding:8px 18px; height:36px">Datei auswählen</button>
+          <div class="recent">Auch sehr große Dateien (mehrere hunderttausend Zeilen) werden unterstützt.</div>
+        </div>
+      </div>
+
+      <div class="table-host" id="table-host" style="display:none">
+        <div class="grid-scroller" id="grid-scroller" tabindex="0">
+          <div class="grid-sizer" id="grid-sizer">
+            <div class="grid-header-row" id="grid-header"></div>
+            <div class="grid-frozen-rows" id="grid-frozen" style="display:none"></div>
+            <div class="grid-rows" id="grid-rows"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div class="label" id="loading-label">Lade Datei…</div>
+        <div class="sub" id="loading-sub"></div>
+      </div>
+    </div>
+
+    <div class="status-bar" id="status-bar" style="display:none">
+      <span><span class="dot"></span><span id="status-text">Bereit</span></span>
+      <div class="sep"></div>
+      <span>Zeilen: <span class="stat-num" id="stat-rows">0</span></span>
+      <span>Spalten: <span class="stat-num" id="stat-cols">0</span></span>
+      <span id="stat-delim"></span>
+      <div class="sep"></div>
+      <span id="stat-sel">Auswahl: –</span>
+      <span id="stat-sum" style="display:none">Summe: <span class="stat-num" id="stat-sum-val">0</span> · Ø <span class="stat-num" id="stat-avg-val">0</span></span>
+      <span id="stat-filters" class="filters-chip" style="display:none"></span>
+      <span class="tb-spacer" style="flex:1"></span>
+      <span style="color:var(--text-soft)"><kbd>?</kbd> Hilfe · <kbd>Strg</kbd>+<kbd>Z</kbd> Undo</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="ctx-menu-host"></div>
+<div id="opts-menu-host"></div>
+<div id="filter-pop-host"></div>
+
+<div class="modal-bg" id="sr-modal">
+  <div class="modal sr-modal" style="max-width:640px">
+    <h3>Suchen &amp; Ersetzen</h3>
+    <div class="sr-grid">
+      <label>Suchen</label>
+      <input type="text" id="sr-find" placeholder="Suchtext oder Regex…" autocomplete="off"/>
+      <label>Ersetzen</label>
+      <input type="text" id="sr-repl" placeholder="Ersetzung… (Regex: $1, $2, …)" autocomplete="off"/>
+    </div>
+    <div class="sr-opts">
+      <label><input type="checkbox" id="sr-case"/> Groß-/Kleinschreibung</label>
+      <label><input type="checkbox" id="sr-whole"/> Ganze Zelle</label>
+      <label><input type="checkbox" id="sr-regex"/> Regex</label>
+      <label><input type="checkbox" id="sr-selonly"/> Nur in Auswahl</label>
+      <label><input type="checkbox" id="sr-cols"/> Nur ausgewählte Spalten</label>
+    </div>
+    <div class="sr-error" id="sr-error"></div>
+    <div class="sr-preview" id="sr-preview"><div class="empty">Suchtext eingeben für Vorschau…</div></div>
+    <div class="sr-actions">
+      <span class="info" id="sr-info"></span>
+      <button class="tb-btn" id="sr-close">Schließen</button>
+      <button class="tb-btn primary" id="sr-replace-all" disabled>Alle ersetzen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="help-modal">
+  <div class="modal">
+    <h3>Tastenkürzel</h3>
+    <div class="kbd-grid">
+      <span class="lbl">Datei öffnen / Schnell-Export CSV</span><span><kbd>Strg</kbd>+<kbd>O</kbd> / <kbd>Strg</kbd>+<kbd>S</kbd></span>
+      <span class="lbl">Markdown in Zwischenablage kopieren</span><span><kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd></span>
+      <span class="lbl">Jira/Confluence in Zwischenablage kopieren</span><span><kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd></span>
+      <span class="lbl">Suchen</span><span><kbd>Strg</kbd>+<kbd>F</kbd></span>
+      <span class="lbl">Suchen &amp; Ersetzen</span><span><kbd>Strg</kbd>+<kbd>H</kbd></span>
+      <span class="lbl">Rückgängig / Wiederherstellen</span><span><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Y</kbd></span>
+      <span class="lbl">Kopieren / Ausschneiden / Einfügen</span><span><kbd>Strg</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></span>
+      <span class="lbl">Alles auswählen</span><span><kbd>Strg</kbd>+<kbd>A</kbd></span>
+      <span class="lbl">Bearbeitung starten</span><span><kbd>F2</kbd> / <kbd>Enter</kbd> / Tippen</span>
+      <span class="lbl">Auswahl leeren</span><span><kbd>Entf</kbd></span>
+      <span class="lbl">Navigation</span><span>Pfeile / <kbd>Tab</kbd> / <kbd>Enter</kbd></span>
+      <span class="lbl">Auswahl erweitern</span><span><kbd>Shift</kbd> + Pfeile</span>
+      <span class="lbl">Anfang / Ende der Tabelle</span><span><kbd>Strg</kbd>+<kbd>Home</kbd> / <kbd>End</kbd></span>
+      <span class="lbl">Filter-Popup öffnen</span><span>Klick auf Trichter-Icon im Header</span>
+      <span class="lbl">Spaltentyp ändern</span><span>Spaltenmenü „▾" → Typ</span>
+      <span class="lbl">Hilfe öffnen</span><span><kbd>?</kbd></span>
+    </div>
+    <div class="close-row"><button class="tb-btn primary" id="help-close" style="padding:6px 14px">Schließen</button></div>
+  </div>
+</div>
+
+<script>
+/* =============================================================
+   CONSTANTS / STATE
+   ============================================================= */
+const DEFAULT_COL_WIDTH = 130;
+const ROW_IDX_W = 60;
+const ROW_H_DEFAULT = 28;
+const ROW_H_MIN = 20;
+const ROW_H_MAX = 80;
+let ROW_H = ROW_H_DEFAULT;  // aktueller Wert; wird aus appState.rowH gespiegelt
+const HEADER_H = 34;
+const HISTORY_LIMIT = 200;
+const VIRTUAL_OVERSCAN = 8;
+const TYPE_DETECT_SAMPLE = 200;
+const TYPE_DETECT_THRESHOLD = 0.8;
+const FILTER_LIST_MAX = 2000;
+
+const appState = {
+  fileName:null, fileSize:0,
+  headers:[], rows:[],
+  delimiter:',', detectedDelimiter:',', hasHeader:true,
+  parserOpts:{ delimiter:'auto', header:'yes' },
+  sort:{ col:-1, dir:0 },
+  filter:'',
+  visibleIndices:[],
+  viewRows:[],        // Render-Plan: {kind:'data', rIdx} | {kind:'group', groupKey, count, collapsed}
+  cols:[],
+  selection:null,
+  active:{ r:0, c:0 },
+  clipboard:null,
+  search:{ hits:[], current:-1 },
+  history:{ past:[], future:[] },
+  frozenRows: 0,                        // Anzahl eingefrorener Zeilen von oben
+  groupBy: null,                        // Spaltenindex oder null
+  collapsedGroups: new Set(),           // Set<String> der eingeklappten Gruppen-Keys
+  rowH: ROW_H_DEFAULT,
+};
+
+/* =============================================================
+   HISTORY (unverändert ggü. V0.3, ergänzt um colFilter)
+   ============================================================= */
+function applyRowHeight(h) {
+  h = Math.max(ROW_H_MIN, Math.min(ROW_H_MAX, Math.round(h)));
+  appState.rowH = h;
+  ROW_H = h;
+  document.documentElement.style.setProperty('--row-h', h + 'px');
+}
+function frozenHeight() { return appState.frozenRows * ROW_H; }
+
+function pushHistory(cmd) {
+  appState.history.past.push(cmd);
+  if (appState.history.past.length > HISTORY_LIMIT) appState.history.past.shift();
+  appState.history.future = [];
+  updateUndoUI();
+}
+function undo() { const c = appState.history.past.pop(); if (!c) return; applyInverse(c); appState.history.future.push(c); updateUndoUI(); rebuildVisible(); renderAll(); toast('Rückgängig: ' + c.label); }
+function redo() { const c = appState.history.future.pop(); if (!c) return; applyForward(c); appState.history.past.push(c); updateUndoUI(); rebuildVisible(); renderAll(); toast('Wiederhergestellt: ' + c.label); }
+function updateUndoUI() {
+  document.getElementById('btn-undo').disabled = appState.history.past.length === 0;
+  document.getElementById('btn-redo').disabled = appState.history.future.length === 0;
+}
+
+function applyForward(cmd) {
+  switch (cmd.type) {
+    case 'editCells': for (const ch of cmd.changes) appState.rows[ch.r][ch.c] = ch.to; break;
+    case 'addRows': appState.rows.splice(cmd.at, 0, ...cmd.rowsData.map(r => r.slice())); break;
+    case 'delRows': [...cmd.indices].sort((a,b)=>b-a).forEach(i => appState.rows.splice(i,1)); break;
+    case 'moveRow': { const row = appState.rows.splice(cmd.from, 1)[0]; appState.rows.splice(cmd.to, 0, row); break; }
+    case 'addCol':
+      appState.headers.splice(cmd.at, 0, cmd.name);
+      appState.cols.splice(cmd.at, 0, { width:cmd.width, hidden:false, pinned:false, type:'auto', detectedType:'text', filter:null });
+      appState.rows.forEach(r => r.splice(cmd.at, 0, ''));
+      break;
+    case 'delCols': { const set = new Set(cmd.indices); appState.headers = appState.headers.filter((_,i)=>!set.has(i)); appState.cols = appState.cols.filter((_,i)=>!set.has(i)); appState.rows = appState.rows.map(r => r.filter((_,i)=>!set.has(i))); break; }
+    case 'moveCol': { const h = appState.headers.splice(cmd.from,1)[0]; const c = appState.cols.splice(cmd.from,1)[0]; appState.headers.splice(cmd.to, 0, h); appState.cols.splice(cmd.to, 0, c); appState.rows.forEach(r => { const v = r.splice(cmd.from,1)[0]; r.splice(cmd.to,0,v); }); break; }
+    case 'renameHeader': appState.headers[cmd.c] = cmd.to; break;
+    case 'colMeta': appState.cols[cmd.c][cmd.key] = cmd.to; break;
+    case 'colFilter': appState.cols[cmd.c].filter = cmd.to ? JSON.parse(JSON.stringify(cmd.to)) : null; break;
+  }
+}
+function applyInverse(cmd) {
+  switch (cmd.type) {
+    case 'editCells': for (const ch of cmd.changes) appState.rows[ch.r][ch.c] = ch.from; break;
+    case 'addRows': appState.rows.splice(cmd.at, cmd.rowsData.length); break;
+    case 'delRows': { const sorted = cmd.indices.map((i,k)=>({i, data:cmd.rowsBackup[k]})).sort((a,b)=>a.i-b.i); for (const o of sorted) appState.rows.splice(o.i, 0, o.data.slice()); break; }
+    case 'moveRow': { const row = appState.rows.splice(cmd.to, 1)[0]; appState.rows.splice(cmd.from, 0, row); break; }
+    case 'addCol': appState.headers.splice(cmd.at,1); appState.cols.splice(cmd.at,1); appState.rows.forEach(r => r.splice(cmd.at,1)); break;
+    case 'delCols': { const sorted = cmd.indices.map((i,k)=>({i, b:cmd.backup[k]})).sort((a,b)=>a.i-b.i); for (const o of sorted) { appState.headers.splice(o.i,0,o.b.header); appState.cols.splice(o.i,0,o.b.col); appState.rows.forEach((r,ri)=>r.splice(o.i,0,o.b.values[ri] ?? '')); } break; }
+    case 'moveCol': { const h = appState.headers.splice(cmd.to,1)[0]; const c = appState.cols.splice(cmd.to,1)[0]; appState.headers.splice(cmd.from,0,h); appState.cols.splice(cmd.from,0,c); appState.rows.forEach(r=>{ const v=r.splice(cmd.to,1)[0]; r.splice(cmd.from,0,v); }); break; }
+    case 'renameHeader': appState.headers[cmd.c] = cmd.from; break;
+    case 'colMeta': appState.cols[cmd.c][cmd.key] = cmd.from; break;
+    case 'colFilter': appState.cols[cmd.c].filter = cmd.from ? JSON.parse(JSON.stringify(cmd.from)) : null; break;
+  }
+}
+
+/* =============================================================
+   PARSER
+   ============================================================= */
+function detectDelimiter(text) {
+  const cands = [',', ';', '\t', '|'];
+  const sample = text.split(/\r?\n/).slice(0, 10).filter(l => l.length > 0);
+  if (!sample.length) return ',';
+  let best=',', bestScore=-1;
+  for (const d of cands) {
+    const counts = sample.map(l => { let n=0, q=false; for (let i=0;i<l.length;i++){const c=l[i]; if (c==='"') q=!q; else if (c===d && !q) n++;} return n; });
+    if (!counts[0]) continue;
+    const avg = counts.reduce((a,b)=>a+b,0)/counts.length;
+    const v = counts.reduce((a,b)=>a+(b-avg)**2,0)/counts.length;
+    const sc = avg - v*2; if (sc > bestScore) { bestScore = sc; best = d; }
+  }
+  return best;
+}
+function parseCSV(text, delim) {
+  const rows=[]; let row=[], field='', inQ=false, i=0; const L=text.length;
+  while (i < L) {
+    const c = text[i];
+    if (inQ) { if (c==='"') { if (text[i+1]==='"') { field+='"'; i+=2; continue;} inQ=false; i++; continue; } field+=c; i++; continue; }
+    if (c==='"') { inQ=true; i++; continue; }
+    if (c===delim) { row.push(field); field=''; i++; continue; }
+    if (c==='\r') { i++; continue; }
+    if (c==='\n') { row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+    field+=c; i++;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  while (rows.length && rows[rows.length-1].length===1 && rows[rows.length-1][0]==='') rows.pop();
+  const maxC = rows.reduce((m,r)=>Math.max(m,r.length),0);
+  for (const r of rows) while (r.length<maxC) r.push('');
+  return rows;
+}
+function serializeCSV(headers, rows, delim) {
+  const needsQ = v => v.includes(delim) || v.includes('"') || v.includes('\n') || v.includes('\r');
+  const esc = v => { v = String(v ?? ''); return needsQ(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const out = [headers.map(esc).join(delim)];
+  for (const r of rows) out.push(r.map(esc).join(delim));
+  return out.join('\r\n');
+}
+function parseTSV(text) {
+  const rows=[]; let row=[], field='', inQ=false, i=0; const L=text.length;
+  while (i < L) { const c = text[i];
+    if (inQ) { if (c==='"') { if (text[i+1]==='"') { field+='"'; i+=2; continue;} inQ=false; i++; continue; } field+=c; i++; continue; }
+    if (c==='"') { inQ=true; i++; continue; }
+    if (c==='\t') { row.push(field); field=''; i++; continue; }
+    if (c==='\r') { i++; continue; }
+    if (c==='\n') { row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+    field+=c; i++;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  while (rows.length && rows[rows.length-1].length===1 && rows[rows.length-1][0]==='') rows.pop();
+  return rows;
+}
+function matrixToTSV(m) {
+  return m.map(r => r.map(v => { v = String(v ?? ''); if (v.includes('\t') || v.includes('\n') || v.includes('"')) return '"' + v.replace(/"/g,'""') + '"'; return v; }).join('\t')).join('\n');
+}
+
+/* =============================================================
+   COLUMN-TYPES (NEU)
+   ============================================================= */
+const ColumnTypes = (() => {
+  // Date regex collection (common formats)
+  // Returns parsed Date object or NaN
+  function parseNumber(v) {
+    if (v === '' || v == null) return NaN;
+    const s = String(v).trim();
+    if (s === '') return NaN;
+    // Reject things like "12abc"
+    // Allow German format: "1.234,56" or US "1,234.56" or "1234.56" or "1234,56"
+    // Strategy: remove thousand separators based on which decimal is last
+    let cleaned = s.replace(/[\s\u00A0\u202F]/g,'');
+    if (!/^[-+]?[\d.,]+([eE][-+]?\d+)?$/.test(cleaned)) return NaN;
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    if (lastComma !== -1 && lastDot !== -1) {
+      if (lastComma > lastDot) cleaned = cleaned.replace(/\./g,'').replace(',', '.');
+      else cleaned = cleaned.replace(/,/g,'');
+    } else if (lastComma !== -1) {
+      // Only comma present. If 3 digits after, treat as thousands sep
+      const afterComma = cleaned.length - lastComma - 1;
+      if (afterComma === 3 && cleaned.split(',').length > 2) cleaned = cleaned.replace(/,/g,'');
+      else cleaned = cleaned.replace(',', '.');
+    }
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? NaN : n;
+  }
+  function parseDate(v) {
+    if (v === '' || v == null) return NaN;
+    const s = String(v).trim();
+    if (s === '') return NaN;
+    // ISO: YYYY-MM-DD or YYYY-MM-DDTHH:MM[:SS]
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+    if (m) { const d = new Date(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0)); return isNaN(d) ? NaN : d.getTime(); }
+    // DE: DD.MM.YYYY (+ optional time)
+    m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+    if (m) { let y = +m[3]; if (y < 100) y += y < 50 ? 2000 : 1900; const d = new Date(y, +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0), +(m[6]||0)); return isNaN(d) ? NaN : d.getTime(); }
+    // US: MM/DD/YYYY
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+    if (m) { let y = +m[3]; if (y < 100) y += y < 50 ? 2000 : 1900; const d = new Date(y, +m[1]-1, +m[2], +(m[4]||0), +(m[5]||0), +(m[6]||0)); return isNaN(d) ? NaN : d.getTime(); }
+    // DE short: DD.MM. (current year) – we skip to avoid false positives
+    return NaN;
+  }
+  function detectType(values) {
+    let nNum = 0, nDate = 0, nTotal = 0;
+    const lim = Math.min(values.length, TYPE_DETECT_SAMPLE);
+    // even sampling
+    const step = Math.max(1, Math.floor(values.length / lim));
+    for (let i=0; i<values.length; i+=step) {
+      const v = values[i];
+      if (v === '' || v == null) continue;
+      nTotal++;
+      if (!isNaN(parseNumber(v))) nNum++;
+      if (!isNaN(parseDate(v))) nDate++;
+    }
+    if (nTotal === 0) return 'text';
+    const numRatio = nNum / nTotal;
+    const dateRatio = nDate / nTotal;
+    // Prefer date if clear majority and at least 3 entries (avoid 1/1)
+    if (dateRatio >= TYPE_DETECT_THRESHOLD && nTotal >= 3 && dateRatio >= numRatio) return 'date';
+    if (numRatio >= TYPE_DETECT_THRESHOLD) return 'number';
+    return 'text';
+  }
+  function detectAll() {
+    for (let c = 0; c < appState.headers.length; c++) {
+      const vals = [];
+      const lim = Math.min(appState.rows.length, TYPE_DETECT_SAMPLE * 3);
+      for (let r = 0; r < lim; r++) vals.push(appState.rows[r][c]);
+      const t = detectType(vals);
+      appState.cols[c].detectedType = t;
+      if (!appState.cols[c].type || appState.cols[c].type === 'auto') {
+        // keep 'auto', effective type comes from detected
+      }
+    }
+  }
+  function effectiveType(c) {
+    const meta = appState.cols[c];
+    if (!meta) return 'text';
+    if (meta.type && meta.type !== 'auto') return meta.type;
+    return meta.detectedType || 'text';
+  }
+  function formatValue(v, type) {
+    if (v === '' || v == null) return '';
+    if (type === 'number') {
+      const n = parseNumber(v);
+      if (isNaN(n)) return String(v);
+      // Preserve at most 6 decimals, group thousands
+      return n.toLocaleString('de-DE', { maximumFractionDigits: 6 });
+    }
+    if (type === 'date') {
+      const t = parseDate(v);
+      if (isNaN(t)) return String(v);
+      const d = new Date(t);
+      const hasTime = /[ T]\d{1,2}:\d{1,2}/.test(String(v));
+      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const yy = d.getFullYear();
+      if (hasTime) {
+        const hh = String(d.getHours()).padStart(2,'0');
+        const mi = String(d.getMinutes()).padStart(2,'0');
+        return `${dd}.${mm}.${yy} ${hh}:${mi}`;
+      }
+      return `${dd}.${mm}.${yy}`;
+    }
+    return String(v);
+  }
+  function compare(a, b, type) {
+    if (type === 'number') {
+      const na = parseNumber(a), nb = parseNumber(b);
+      const aNa = isNaN(na), bNa = isNaN(nb);
+      if (aNa && bNa) return String(a).localeCompare(String(b), undefined, { numeric:true });
+      if (aNa) return 1;
+      if (bNa) return -1;
+      return na - nb;
+    }
+    if (type === 'date') {
+      const da = parseDate(a), db = parseDate(b);
+      const aNa = isNaN(da), bNa = isNaN(db);
+      if (aNa && bNa) return String(a).localeCompare(String(b), undefined, { numeric:true });
+      if (aNa) return 1;
+      if (bNa) return -1;
+      return da - db;
+    }
+    return String(a).localeCompare(String(b), undefined, { numeric:true });
+  }
+  return { parseNumber, parseDate, detectType, detectAll, effectiveType, formatValue, compare };
+})();
+
+/* =============================================================
+   LOADER
+   ============================================================= */
+function showLoading(label, sub='') { document.getElementById('loading-label').textContent = label; document.getElementById('loading-sub').textContent = sub; document.getElementById('loading').classList.add('show'); }
+function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+async function loadFile(file) {
+  showLoading('Lese Datei…', formatBytes(file.size));
+  const text = await new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsText(file, 'UTF-8'); });
+  document.getElementById('loading-label').textContent = 'Parse Inhalt…';
+  await yieldUI();
+  loadCSVText(text, file.name, file.size);
+  hideLoading();
+}
+function yieldUI() { return new Promise(r => setTimeout(r, 0)); }
+
+function loadCSVText(text, fileName, fileSize) {
+  const opt = appState.parserOpts.delimiter;
+  let delim;
+  if (opt === 'auto') delim = detectDelimiter(text);
+  else if (opt === 'TAB') delim = '\t';
+  else delim = opt;
+  appState.detectedDelimiter = delim; appState.delimiter = delim;
+  const parsed = parseCSV(text, delim);
+  if (!parsed.length) { toast('Datei ist leer.', 'error'); return; }
+  const useHeader = appState.parserOpts.header === 'yes';
+  appState.hasHeader = useHeader;
+  if (useHeader) { appState.headers = parsed[0].map((h,i) => h.trim() || `Spalte ${i+1}`); appState.rows = parsed.slice(1); }
+  else { appState.headers = parsed[0].map((_,i) => `Spalte ${i+1}`); appState.rows = parsed; }
+  appState.fileName = fileName; appState.fileSize = fileSize;
+  appState.cols = appState.headers.map(() => ({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', filter:null }));
+  appState.sort = { col:-1, dir:0 }; appState.filter = '';
+  appState.selection = null; appState.active = { r:0, c:0 };
+  appState.history = { past:[], future:[] };
+  appState.search = { hits:[], current:-1 };
+  appState.frozenRows = 0; appState.groupBy = null; appState.collapsedGroups = new Set();
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-nav').style.display = 'none';
+  // Type-Erkennung
+  ColumnTypes.detectAll();
+  rebuildVisible();
+  renderAll();
+  toast(`„${fileName}" geladen (${appState.rows.length.toLocaleString('de-DE')} Zeilen)`, 'success');
+}
+
+/* =============================================================
+   FILTER (Volltext + Pro-Spalte) / SORT
+   ============================================================= */
+function rowPassesColFilters(rIdx) {
+  for (let c = 0; c < appState.cols.length; c++) {
+    const f = appState.cols[c].filter;
+    if (!f) continue;
+    const v = appState.rows[rIdx][c] ?? '';
+    if (f.kind === 'values') {
+      // f.excluded: Set (Stringified value, with __EMPTY__ for empty)
+      const key = v === '' ? '__EMPTY__' : String(v);
+      if (f.excluded && f.excluded.includes(key)) return false;
+    } else if (f.kind === 'range') {
+      const type = ColumnTypes.effectiveType(c);
+      if (type === 'number') {
+        if (v === '' && (f.min != null || f.max != null)) return false;
+        const n = ColumnTypes.parseNumber(v);
+        if (isNaN(n)) return false;
+        if (f.min != null && n < f.min) return false;
+        if (f.max != null && n > f.max) return false;
+      } else if (type === 'date') {
+        if (v === '' && (f.min != null || f.max != null)) return false;
+        const t = ColumnTypes.parseDate(v);
+        if (isNaN(t)) return false;
+        if (f.min != null && t < f.min) return false;
+        if (f.max != null && t > f.max) return false;
+      }
+    }
+  }
+  return true;
+}
+function hasAnyColFilter() {
+  return appState.cols.some(c => c.filter);
+}
+function countActiveColFilters() {
+  return appState.cols.filter(c => c.filter).length;
+}
+function rebuildVisible() {
+  const f = appState.filter.toLowerCase().trim();
+  const hasCol = hasAnyColFilter();
+  const idx = [];
+  if (!f && !hasCol) {
+    idx.length = appState.rows.length;
+    for (let i=0; i<idx.length; i++) idx[i] = i;
+  } else {
+    for (let i=0; i<appState.rows.length; i++) {
+      if (hasCol && !rowPassesColFilters(i)) continue;
+      if (f) {
+        const row = appState.rows[i];
+        let hit = false;
+        for (let j=0; j<row.length; j++) if (String(row[j]).toLowerCase().includes(f)) { hit = true; break; }
+        if (!hit) continue;
+      }
+      idx.push(i);
+    }
+  }
+  if (appState.sort.dir !== 0 && appState.sort.col >= 0) {
+    const c = appState.sort.col, d = appState.sort.dir;
+    const type = ColumnTypes.effectiveType(c);
+    idx.sort((a,b) => ColumnTypes.compare(appState.rows[a][c] ?? '', appState.rows[b][c] ?? '', type) * d);
+  }
+  appState.visibleIndices = idx;
+  buildViewRows();
+}
+
+function buildViewRows() {
+  const gb = appState.groupBy;
+  const vr = [];
+  if (gb == null || gb < 0 || gb >= appState.headers.length) {
+    for (const r of appState.visibleIndices) vr.push({ kind:'data', rIdx:r });
+    appState.viewRows = vr;
+    return;
+  }
+  // Erzwinge Sortierung nach Gruppierungsspalte, wenn nicht schon sortiert
+  const type = ColumnTypes.effectiveType(gb);
+  const sorted = appState.visibleIndices.slice();
+  if (appState.sort.col !== gb) {
+    sorted.sort((a,b) => ColumnTypes.compare(appState.rows[a][gb] ?? '', appState.rows[b][gb] ?? '', type));
+  }
+  let curKey = null;
+  let groupBucket = null;
+  for (const r of sorted) {
+    const raw = appState.rows[r][gb] ?? '';
+    const key = raw === '' ? '__EMPTY__' : String(raw);
+    if (key !== curKey) {
+      curKey = key;
+      const collapsed = appState.collapsedGroups.has(key);
+      groupBucket = { kind:'group', groupKey:key, groupCol:gb, display: raw === '' ? '(Leer)' : ColumnTypes.formatValue(raw, type), count:0, collapsed };
+      vr.push(groupBucket);
+    }
+    groupBucket.count++;
+    if (!groupBucket.collapsed) vr.push({ kind:'data', rIdx:r, groupKey:key });
+  }
+  appState.viewRows = vr;
+}
+function findViewRowByData(rIdx) {
+  const vr = appState.viewRows;
+  for (let i=0; i<vr.length; i++) if (vr[i].kind === 'data' && vr[i].rIdx === rIdx) return i;
+  return -1;
+}
+function nextDataViewRow(startVk, dir) {
+  const vr = appState.viewRows;
+  let k = startVk + dir;
+  while (k >= 0 && k < vr.length && vr[k].kind !== 'data') k += dir;
+  return (k >= 0 && k < vr.length) ? k : startVk;
+}
+
+/* =============================================================
+   SELECTION
+   ============================================================= */
+function normalizedSel() { const s = appState.selection; if (!s) return null; return { type:s.type, r1:Math.min(s.r1,s.r2), r2:Math.max(s.r1,s.r2), c1:Math.min(s.c1,s.c2), c2:Math.max(s.c1,s.c2) }; }
+function setSelection(type, r1, c1, r2, c2, ar, ac) { appState.selection = { type, r1, c1, r2, c2, anchorR: ar ?? r1, anchorC: ac ?? c1 }; }
+function selectCell(r, c) { appState.active = {r,c}; setSelection('cells', r,c,r,c); updateSelectionDOM(); }
+function selectRange(r1,c1,r2,c2) { setSelection('cells', r1,c1,r2,c2, r1,c1); appState.active = {r:r1,c:c1}; updateSelectionDOM(); }
+function selectRow(ri) { setSelection('rows', ri, 0, ri, appState.headers.length-1, ri, 0); appState.active = {r:ri,c:0}; updateSelectionDOM(); }
+function selectCol(ci) { setSelection('cols', 0, ci, Math.max(0, appState.rows.length-1), ci, 0, ci); appState.active = {r:0,c:ci}; updateSelectionDOM(); }
+function isCellSelected(r,c) { const s = normalizedSel(); if (!s) return false; if (appState.selection.type === 'rows') return r>=s.r1 && r<=s.r2; if (appState.selection.type === 'cols') return c>=s.c1 && c<=s.c2; return r>=s.r1 && r<=s.r2 && c>=s.c1 && c<=s.c2; }
+
+/* =============================================================
+   RENDER (Virtual scrolling)
+   ============================================================= */
+let renderScheduled = false;
+function scheduleRender() { if (renderScheduled) return; renderScheduled = true; requestAnimationFrame(() => { renderScheduled = false; renderVirtual(); }); }
+function visibleCols() { const arr = appState.cols.map((c,i) => ({ ci:i, ...c })).filter(c => !c.hidden); const pinned = arr.filter(c => c.pinned); const rest = arr.filter(c => !c.pinned); return [...pinned, ...rest]; }
+function pinOffsets(cols) { const m = {}; let off = ROW_IDX_W; for (const c of cols) if (c.pinned) { m[c.ci] = off; off += c.width; } return m; }
+function totalColWidth(cols) { let w = ROW_IDX_W; for (const c of cols) w += c.width; return w; }
+
+function renderAll() {
+  const hasData = appState.headers.length > 0;
+  document.getElementById('empty-state').style.display = hasData ? 'none' : 'flex';
+  document.getElementById('table-host').style.display  = hasData ? 'flex' : 'none';
+  document.getElementById('status-bar').style.display  = hasData ? 'flex' : 'none';
+  ['btn-export','btn-add-row','btn-add-col','btn-copy','btn-cut','btn-paste','btn-replace','btn-view'].forEach(id => document.getElementById(id).disabled = !hasData);
+  document.getElementById('btn-clear-filters').disabled = !hasData || !hasAnyColFilter();
+  if (!hasData) return;
+  renderHeader();
+  setSizerHeight();
+  renderVirtual();
+  updateStatus();
+  updateUndoUI();
+}
+function setSizerHeight() {
+  const sizer = document.getElementById('grid-sizer');
+  const cols = visibleCols();
+  sizer.style.width = totalColWidth(cols) + 'px';
+  const total = appState.viewRows.length * ROW_H + HEADER_H;
+  sizer.style.height = total + 'px';
+}
+
+function typeIconSVG(type) {
+  if (type === 'number') return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>';
+  if (type === 'date') return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>';
+}
+function filterIconSVG(active) {
+  const c = active ? 'active' : '';
+  return `<svg class="${c}" width="11" height="11" viewBox="0 0 24 24" fill="${active?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`;
+}
+
+function renderHeader() {
+  const head = document.getElementById('grid-header');
+  const cols = visibleCols();
+  const offs = pinOffsets(cols);
+  const sel = normalizedSel();
+  const selType = appState.selection?.type;
+  let html = `<div class="ghead row-idx" style="width:${ROW_IDX_W}px; flex-shrink:0; left:0; position:sticky; z-index:8;">#</div>`;
+  for (let k=0; k<cols.length; k++) {
+    const { ci, width, pinned } = cols[k];
+    const ind = appState.sort.col === ci ? (appState.sort.dir===1?'▲':appState.sort.dir===-1?'▼':'') : '';
+    const selCol = (selType === 'cols' || selType === 'cells') && sel && sel.c1 <= ci && ci <= sel.c2 && selType !== 'rows';
+    const pinStyle = pinned ? `position:sticky; left:${offs[ci]}px; z-index:7;` : '';
+    const nextOrig = ci + 1;
+    const hidAfter = nextOrig < appState.cols.length && appState.cols[nextOrig].hidden;
+    const type = ColumnTypes.effectiveType(ci);
+    const hasFilter = !!appState.cols[ci].filter;
+    html += `<div class="ghead ${pinned?'pinned':''} ${selCol?'selected':''} ${hidAfter?'hidden-after':''} ${hasFilter?'filtered':''}" style="width:${width}px; ${pinStyle}" data-col="${ci}" title="Typ: ${typeLabel(type)}${appState.cols[ci].type && appState.cols[ci].type !== 'auto' ? ' (manuell)' : ' (erkannt)'}">
+      <span class="type-ico t-${type}" title="Typ: ${typeLabel(type)}">${typeIconSVG(type)}</span>
+      <span class="lbl" data-h="${ci}" title="Klick: sortieren · Doppelklick: bearbeiten">${escapeHTML(appState.headers[ci])}</span>
+      <span class="sort ${ind?'active':''}">${ind}</span>
+      <button class="filt-btn ${hasFilter?'active':''}" data-filt="${ci}" title="Filtern">${filterIconSVG(hasFilter)}</button>
+      <button class="col-mn" data-cm="${ci}" title="Spaltenmenü">▾</button>
+      <div class="resz" data-rz="${ci}" title="Ziehen: Breite · Doppelklick: Auto"></div>
+    </div>`;
+  }
+  head.innerHTML = html;
+  bindHeaderEvents();
+}
+
+function buildRowHTML(vk, viewRow, ctx) {
+  const { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, isFrozen } = ctx;
+  if (viewRow.kind === 'group') {
+    const caret = viewRow.collapsed ? '▶' : '▼';
+    const colHeader = appState.headers[viewRow.groupCol] ?? '';
+    const top = isFrozen ? (vk * ROW_H) : (vk * ROW_H);
+    return `<div class="grid-row group-header" style="top:${top}px; width:${totalW}px" data-vk="${vk}" data-gk="${escapeAttr(viewRow.groupKey)}">
+      <div class="gcell row-idx" style="width:${ROW_IDX_W}px; left:0; position:sticky; z-index:4; background:var(--bg-group);"></div>
+      <div class="gcell" style="border-right:none; position:sticky; left:${ROW_IDX_W}px;">
+        <span class="gh-caret">${caret}</span>
+        <span style="color:var(--text-soft); font-size:11.5px; margin-right:6px;">${escapeHTML(colHeader)}:</span>
+        <span class="gh-value">${escapeHTML(viewRow.display)}</span>
+        <span class="gh-count">${viewRow.count.toLocaleString('de-DE')} ${viewRow.count === 1 ? 'Zeile' : 'Zeilen'}</span>
+      </div>
+    </div>`;
+  }
+  const ri = viewRow.rIdx;
+  const row = appState.rows[ri];
+  const top = vk * ROW_H;
+  const rowSelected = sel && selType === 'rows' && ri >= sel.r1 && ri <= sel.r2;
+  const altClass = vk % 2 === 1 ? 'alt' : '';
+  let html = `<div class="grid-row ${altClass} ${rowSelected?'row-selected':''}" style="top:${top}px; width:${totalW}px" data-row="${ri}" data-vk="${vk}">`;
+  html += `<div class="gcell row-idx" style="width:${ROW_IDX_W}px; left:0; position:sticky; z-index:4;" data-rix="${ri}" draggable="true" title="Klick: Zeile wählen · Ziehen: verschieben">${(ri+1).toLocaleString('de-DE')}</div>`;
+  for (let ck = 0; ck < cols.length; ck++) {
+    const { ci, width, pinned } = cols[ck];
+    const t = colTypes[ck];
+    const raw = row[ci] ?? '';
+    const display = ColumnTypes.formatValue(raw, t);
+    let cls = `gcell t-${t}`;
+    if (sel) {
+      let isS = false;
+      if (selType === 'cells') isS = ri>=sel.r1 && ri<=sel.r2 && ci>=sel.c1 && ci<=sel.c2;
+      else if (selType === 'rows') isS = ri>=sel.r1 && ri<=sel.r2;
+      else if (selType === 'cols') isS = ci>=sel.c1 && ci<=sel.c2;
+      if (isS) cls += ' selected';
+    }
+    if (appState.active.r === ri && appState.active.c === ci) cls += ' active';
+    if (searchSet.has(ri+':'+ci)) cls += ' search-hit';
+    if (searchCur && searchCur.r === ri && searchCur.c === ci) cls += ' current';
+    if (pinned) cls += ' pinned';
+    const nextOrig = ci + 1;
+    if (nextOrig < appState.cols.length && appState.cols[nextOrig].hidden) cls += ' hidden-after';
+    const pinStyle = pinned ? `position:sticky; left:${offs[ci]}px; z-index:3;` : '';
+    html += `<div class="${cls}" style="width:${width}px; ${pinStyle}" data-r="${ri}" data-c="${ci}" data-raw="${escapeAttr(String(raw))}">${escapeHTML(display)}</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderVirtual() {
+  const scroller = document.getElementById('grid-scroller');
+  const rowsHost = document.getElementById('grid-rows');
+  const frozenHost = document.getElementById('grid-frozen');
+  if (!scroller || !rowsHost) return;
+  const cols = visibleCols();
+  const offs = pinOffsets(cols);
+  const totalW = totalColWidth(cols);
+  const sel = normalizedSel();
+  const selType = appState.selection?.type;
+  const searchCur = appState.search.current >= 0 ? appState.search.hits[appState.search.current] : null;
+  const searchSet = new Set(appState.search.hits.map(h => h.r + ':' + h.c));
+  const colTypes = cols.map(co => ColumnTypes.effectiveType(co.ci));
+  const ctx = { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes };
+
+  const viewRows = appState.viewRows;
+  const frozenN = Math.min(appState.frozenRows, viewRows.length);
+  const frozenH = frozenN * ROW_H;
+
+  // Frozen container
+  if (frozenN > 0) {
+    frozenHost.style.display = 'block';
+    frozenHost.style.top = HEADER_H + 'px';
+    frozenHost.style.height = frozenH + 'px';
+    frozenHost.style.width = totalW + 'px';
+    let fhtml = '';
+    for (let k = 0; k < frozenN; k++) {
+      fhtml += buildRowHTML(k, viewRows[k], { ...ctx, isFrozen:true });
+    }
+    frozenHost.innerHTML = fhtml;
+  } else {
+    frozenHost.style.display = 'none';
+    frozenHost.innerHTML = '';
+  }
+
+  // Virtual scrolling area for non-frozen rows
+  const scrollTop = scroller.scrollTop;
+  const viewportH = scroller.clientHeight - HEADER_H - frozenH;
+  const virtualRowStart = frozenN;
+  const totalVirtualRows = viewRows.length - frozenN;
+  const virtualOffsetTop = HEADER_H + frozenH;
+
+  // The rowsHost sits inside the sizer starting at virtualOffsetTop
+  rowsHost.style.top = virtualOffsetTop + 'px';
+  rowsHost.style.height = (totalVirtualRows * ROW_H) + 'px';
+  rowsHost.style.width = totalW + 'px';
+
+  const firstVisible = Math.max(0, Math.floor((scrollTop - virtualOffsetTop) / ROW_H) - VIRTUAL_OVERSCAN);
+  const lastVisible = Math.min(totalVirtualRows - 1, Math.ceil((scrollTop - virtualOffsetTop + viewportH) / ROW_H) + VIRTUAL_OVERSCAN);
+
+  let html = '';
+  for (let k = firstVisible; k <= lastVisible; k++) {
+    if (k < 0 || k >= totalVirtualRows) continue;
+    const viewRow = viewRows[virtualRowStart + k];
+    html += buildRowHTML(k, viewRow, ctx);
+  }
+  rowsHost.innerHTML = html;
+  bindRowEvents();
+  placeFillHandle();
+}
+function escapeAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function bindHeaderEvents() {
+  const head = document.getElementById('grid-header');
+  head.querySelectorAll('.ghead[data-col]').forEach(el => {
+    const ci = +el.dataset.col;
+    el.addEventListener('click', e => {
+      if (e.target.closest('.resz, .col-mn, .filt-btn') || e.target.matches('.lbl[contenteditable="true"]')) return;
+      toggleSort(ci);
+    });
+    el.setAttribute('draggable', 'true');
+    el.addEventListener('dragstart', e => { if (document.activeElement && document.activeElement.dataset?.h) { e.preventDefault(); return; } colDragOp = { from: ci }; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'col:'+ci); } catch(_){} });
+    el.addEventListener('dragover', e => { if (!colDragOp) return; e.preventDefault(); const r = el.getBoundingClientRect(); const left = (e.clientX - r.left) < r.width/2; el.style.boxShadow = left ? 'inset 3px 0 0 var(--accent)' : 'inset -3px 0 0 var(--accent)'; });
+    el.addEventListener('dragleave', () => el.style.boxShadow = '');
+    el.addEventListener('drop', e => { if (!colDragOp) return; e.preventDefault(); el.style.boxShadow = ''; const r = el.getBoundingClientRect(); const left = (e.clientX - r.left) < r.width/2; moveColumn(colDragOp.from, ci, left ? 'before' : 'after'); colDragOp = null; });
+  });
+  head.querySelectorAll('.lbl[data-h]').forEach(el => {
+    el.addEventListener('dblclick', e => { e.stopPropagation(); el.setAttribute('contenteditable', 'true'); el.focus(); const r = document.createRange(); r.selectNodeContents(el); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); });
+    el.addEventListener('click', e => e.stopPropagation());
+    el.addEventListener('blur', () => { el.removeAttribute('contenteditable'); const ci = +el.dataset.h; const newV = el.textContent; if (newV !== appState.headers[ci]) { pushHistory({ label:'Spalte umbenennen', type:'renameHeader', c:ci, from:appState.headers[ci], to:newV }); appState.headers[ci] = newV; } });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } else if (e.key === 'Escape') { el.textContent = appState.headers[+el.dataset.h]; el.blur(); } });
+  });
+  head.querySelectorAll('[data-cm]').forEach(el => { el.addEventListener('click', e => { e.stopPropagation(); const ci = +el.dataset.cm; const r = el.getBoundingClientRect(); selectCol(ci); showContextMenu(r.left, r.bottom + 2, 'col'); }); });
+  head.querySelectorAll('[data-filt]').forEach(el => { el.addEventListener('click', e => { e.stopPropagation(); const ci = +el.dataset.filt; const r = el.getBoundingClientRect(); openFilterPopup(ci, r.left, r.bottom + 4); }); });
+  head.querySelectorAll('.resz').forEach(el => {
+    el.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); const ci = +el.dataset.rz; resizeOp = { ci, startX:e.clientX, startW:appState.cols[ci].width, originalW:appState.cols[ci].width }; el.classList.add('active'); document.body.style.cursor = 'col-resize'; });
+    el.addEventListener('dblclick', e => { e.preventDefault(); e.stopPropagation(); autoFitColumn(+el.dataset.rz); });
+  });
+}
+
+let dragSelect = null, resizeOp = null, autoFillOp = null, rowDragOp = null, colDragOp = null;
+
+function bindGroupClicks(container) {
+  container.querySelectorAll('.grid-row.group-header').forEach(el => {
+    el.addEventListener('click', () => {
+      const gk = el.dataset.gk;
+      if (appState.collapsedGroups.has(gk)) appState.collapsedGroups.delete(gk);
+      else appState.collapsedGroups.add(gk);
+      buildViewRows(); renderAll();
+    });
+  });
+}
+function bindRowEvents() {
+  const rowsHost = document.getElementById('grid-rows');
+  const frozenHost = document.getElementById('grid-frozen');
+  bindGroupClicks(rowsHost);
+  if (frozenHost) bindGroupClicks(frozenHost);
+  const containers = [rowsHost];
+  if (frozenHost && frozenHost.style.display !== 'none') containers.push(frozenHost);
+
+  for (const cont of containers) {
+    cont.querySelectorAll('[data-rix]').forEach(td => {
+      const ri = +td.dataset.rix;
+      td.addEventListener('click', e => { e.stopPropagation(); if (e.shiftKey && appState.selection?.type === 'rows') { const a = appState.selection.anchorR; setSelection('rows', Math.min(a,ri), 0, Math.max(a,ri), appState.headers.length-1, a, 0); appState.active = {r:ri,c:0}; updateSelectionDOM(); } else { selectRow(ri); } });
+      td.addEventListener('contextmenu', e => { e.preventDefault(); if (!isCellSelected(ri,0) || appState.selection?.type!=='rows') selectRow(ri); showContextMenu(e.clientX, e.clientY, 'row'); });
+      td.addEventListener('dragstart', e => { rowDragOp = { from: ri }; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain','row:'+ri); } catch(_){} });
+      td.addEventListener('dragend', () => { rowDragOp = null; clearRowDropLine(); });
+    });
+    cont.querySelectorAll('.gcell[data-r]').forEach(td => {
+      const r = +td.dataset.r, c = +td.dataset.c;
+      td.addEventListener('mousedown', e => {
+        if (e.target.classList.contains('fill-handle')) return;
+        if (td.classList.contains('editing')) return;
+        if (e.button === 2) { if (!isCellSelected(r,c)) selectCell(r,c); return; }
+        if (e.shiftKey && appState.selection) { const a = appState.selection; setSelection('cells', a.anchorR, a.anchorC, r, c, a.anchorR, a.anchorC); appState.active = {r,c}; updateSelectionDOM(); }
+        else { selectCell(r,c); dragSelect = { startR:r, startC:c }; }
+      });
+      td.addEventListener('mouseenter', () => {
+        if (autoFillOp) { autoFillOp.currentR = r; showAutoFillPreview(); return; }
+        if (!dragSelect) return;
+        setSelection('cells', dragSelect.startR, dragSelect.startC, r, c, dragSelect.startR, dragSelect.startC);
+        appState.active = {r,c}; updateSelectionDOM();
+      });
+      td.addEventListener('dblclick', () => beginEditCell(r,c));
+      td.addEventListener('contextmenu', e => { e.preventDefault(); if (!isCellSelected(r,c)) selectCell(r,c); showContextMenu(e.clientX, e.clientY, 'cell'); });
+    });
+  }
+  rowsHost.addEventListener('dragover', e => {
+    if (!rowDragOp) return;
+    e.preventDefault();
+    const t = e.target.closest('[data-rix]'); if (!t) return;
+    const r = t.getBoundingClientRect();
+    const top = (e.clientY - r.top) < r.height/2;
+    clearRowDropLine();
+    const line = document.createElement('div'); line.className = 'row-drop-line'; line.id = 'rdl';
+    line.style.top = (top ? t.offsetTop : t.offsetTop + r.height - 2) + 'px';
+    line.dataset.target = t.dataset.rix; line.dataset.pos = top ? 'before' : 'after';
+    document.getElementById('grid-rows').appendChild(line);
+  });
+  rowsHost.addEventListener('drop', e => { if (!rowDragOp) return; e.preventDefault(); const line = document.getElementById('rdl'); if (line) moveRow(rowDragOp.from, +line.dataset.target, line.dataset.pos); rowDragOp = null; clearRowDropLine(); });
+}
+function clearRowDropLine() { const l = document.getElementById('rdl'); if (l) l.remove(); }
+
+function updateSelectionDOM() { scheduleRender(); updateStatus(); }
+
+function placeFillHandle() {
+  document.querySelectorAll('.fill-handle').forEach(el => el.remove());
+  if (!appState.selection || appState.selection.type !== 'cells') return;
+  const sel = normalizedSel();
+  const td = document.querySelector(`#grid-rows .gcell[data-r="${sel.r2}"][data-c="${sel.c2}"]`);
+  if (!td) return; // Wenn Fill-Target in frozen ist, überspringen wir das Handle
+  const h = document.createElement('div'); h.className = 'fill-handle'; h.title = 'AutoFill ziehen';
+  const host = document.getElementById('grid-rows');
+  h.style.left = (td.offsetLeft + td.offsetWidth - 5) + 'px';
+  h.style.top = (td.parentElement.offsetTop + ROW_H - 5) + 'px';
+  host.appendChild(h);
+  h.addEventListener('mousedown', startAutoFill);
+}
+
+function updateStatus() {
+  const visC = appState.cols.filter(c => !c.hidden).length;
+  document.getElementById('stat-rows').textContent = `${appState.visibleIndices.length.toLocaleString('de-DE')} / ${appState.rows.length.toLocaleString('de-DE')}`;
+  document.getElementById('stat-cols').textContent = `${visC} / ${appState.headers.length}`;
+  document.getElementById('stat-delim').textContent = `Trenner: ${delimLabel(appState.delimiter)}`;
+  document.getElementById('status-text').textContent = appState.fileName ? appState.fileName : 'Bereit';
+
+  // Filters chip
+  const nFilters = countActiveColFilters();
+  const filtChip = document.getElementById('stat-filters');
+  if (nFilters > 0) { filtChip.style.display = 'inline'; filtChip.textContent = `▾ ${nFilters} Spaltenfilter aktiv · Zurücksetzen`; }
+  else { filtChip.style.display = 'none'; }
+
+  const sel = normalizedSel();
+  if (!sel) { document.getElementById('stat-sel').textContent = 'Auswahl: –'; document.getElementById('stat-sum').style.display = 'none'; return; }
+  const nR = sel.r2 - sel.r1 + 1, nC = sel.c2 - sel.c1 + 1;
+  let label = '';
+  if (appState.selection.type === 'rows') label = `${nR} Zeile${nR>1?'n':''}`;
+  else if (appState.selection.type === 'cols') label = `${nC} Spalte${nC>1?'n':''}`;
+  else label = (nR===1&&nC===1) ? `Zelle R${sel.r1+1}, C${sel.c1+1}` : `${nR}×${nC} Zellen`;
+  document.getElementById('stat-sel').textContent = `Auswahl: ${label}`;
+  if (nR * nC > 1 && nR * nC < 100000) {
+    let sum = 0, count = 0;
+    for (let r=sel.r1; r<=sel.r2; r++) for (let c=sel.c1; c<=sel.c2; c++) {
+      const v = appState.rows[r]?.[c]; if (v === undefined || v === '') continue;
+      const n = ColumnTypes.parseNumber(v); if (!isNaN(n) && isFinite(n)) { sum += n; count++; }
+    }
+    if (count > 0) { document.getElementById('stat-sum').style.display = 'inline'; document.getElementById('stat-sum-val').textContent = formatNum(sum); document.getElementById('stat-avg-val').textContent = formatNum(sum/count); }
+    else document.getElementById('stat-sum').style.display = 'none';
+  } else document.getElementById('stat-sum').style.display = 'none';
+}
+
+/* =============================================================
+   EDIT
+   ============================================================= */
+function beginEditCell(r, c) {
+  const td = document.querySelector(`.gcell[data-r="${r}"][data-c="${c}"]`);
+  if (!td) return;
+  td.classList.add('editing');
+  const old = appState.rows[r][c] ?? '';
+  const editor = document.createElement('textarea');
+  editor.className = 'editor'; editor.value = old; editor.rows = 1;
+  td.innerHTML = ''; td.appendChild(editor);
+  editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length);
+  const finish = (commit, advance=null) => {
+    editor.removeEventListener('blur', onBlur); editor.removeEventListener('keydown', onKey);
+    if (commit && editor.value !== old) {
+      pushHistory({ label:'Zelle bearbeiten', type:'editCells', changes:[{r,c,from:old,to:editor.value}] });
+      appState.rows[r][c] = editor.value;
+      // Falls Filter/Sort aktiv: ggf. neu aufbauen. Außerdem ggf. detectedType neu erkennen? Wir aktualisieren detectedType nicht live; bleibt stabil.
+    }
+    scheduleRender();
+    if (commit && (appState.filter || appState.sort.dir !== 0 || hasAnyColFilter())) { rebuildVisible(); renderAll(); }
+    if (advance) moveActive(advance[0], advance[1]);
+  };
+  const onBlur = () => finish(true);
+  const onKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true, [1,0]); }
+    else if (e.key === 'Enter' && e.shiftKey) { /* allow newline */ }
+    else if (e.key === 'Tab') { e.preventDefault(); finish(true, [0, e.shiftKey ? -1 : 1]); }
+    else if (e.key === 'Escape') { e.preventDefault(); editor.value = old; finish(false); }
+  };
+  editor.addEventListener('blur', onBlur); editor.addEventListener('keydown', onKey);
+}
+
+function moveActive(dr, dc, extend=false) {
+  // Nur data-Zeilen aus dem aktuellen Render-Plan (überspringt collapsed groups & group-header)
+  const visR = appState.viewRows.filter(v => v.kind === 'data').map(v => v.rIdx);
+  const visCols = appState.cols.map((c,i)=>({i,c})).filter(x=>!x.c.hidden).map(x=>x.i);
+  if (!visR.length || !visCols.length) return;
+  let { r, c } = appState.active;
+  let rPos = visR.indexOf(r);
+  if (rPos < 0) rPos = 0;
+  let cPos = visCols.indexOf(c);
+  if (cPos < 0) cPos = 0;
+  const nrPos = Math.max(0, Math.min(visR.length-1, rPos + dr));
+  const ncPos = Math.max(0, Math.min(visCols.length-1, cPos + dc));
+  const nr = visR[nrPos], nc = visCols[ncPos];
+  if (extend && appState.selection) { const a = appState.selection; setSelection('cells', a.anchorR, a.anchorC, nr, nc, a.anchorR, a.anchorC); appState.active = {r:nr,c:nc}; updateSelectionDOM(); }
+  else selectCell(nr, nc);
+  scrollIntoView(nr, nc);
+}
+function scrollIntoView(r, c) {
+  const scroller = document.getElementById('grid-scroller');
+  const vk = findViewRowByData(r); if (vk < 0) return;
+  // Frozen rows kleben ohnehin oben — kein Scroll nötig
+  if (vk < appState.frozenRows) {
+    // horizontal scroll ggf. anpassen (unten)
+  } else {
+    const frozenH = frozenHeight();
+    const rowTop = vk * ROW_H + HEADER_H;   // im sizer-Koordinatensystem
+    const rowBot = rowTop + ROW_H;
+    const visibleAreaTop = scroller.scrollTop + HEADER_H + frozenH;
+    const visibleAreaBot = scroller.scrollTop + scroller.clientHeight;
+    if (rowTop < visibleAreaTop) scroller.scrollTop = rowTop - HEADER_H - frozenH;
+    else if (rowBot > visibleAreaBot) scroller.scrollTop = rowBot - scroller.clientHeight;
+  }
+  const cols = visibleCols();
+  let x = ROW_IDX_W; for (const co of cols) { if (co.ci === c) break; x += co.width; }
+  const colW = appState.cols[c].width;
+  if (x < scroller.scrollLeft + (appState.cols[c].pinned ? 0 : ROW_IDX_W)) scroller.scrollLeft = x - ROW_IDX_W;
+  else if (x + colW > scroller.scrollLeft + scroller.clientWidth) scroller.scrollLeft = x + colW - scroller.clientWidth;
+}
+
+/* =============================================================
+   CLIPBOARD
+   ============================================================= */
+function getSelectionAsMatrix() {
+  const sel = normalizedSel(); if (!sel) return null;
+  let rRange, cRange; const visR = appState.visibleIndices;
+  if (appState.selection.type === 'rows') { rRange = visR.filter(r => r>=sel.r1 && r<=sel.r2); cRange = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden); }
+  else if (appState.selection.type === 'cols') { rRange = visR; cRange = []; for (let c=sel.c1; c<=sel.c2; c++) if (!appState.cols[c].hidden) cRange.push(c); }
+  else { rRange = visR.filter(r => r>=sel.r1 && r<=sel.r2); cRange = []; for (let c=sel.c1; c<=sel.c2; c++) if (!appState.cols[c].hidden) cRange.push(c); }
+  const data = rRange.map(r => cRange.map(c => appState.rows[r][c] ?? ''));
+  return { data, rRange, cRange };
+}
+async function copyToSys(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (_) { try { const ta = document.createElement('textarea'); ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); return true; } catch (e) { return false; } }
+}
+function doCopy(cut=false) {
+  const m = getSelectionAsMatrix(); if (!m) return;
+  appState.clipboard = { mode:cut?'cut':'copy', data:m.data, rRange:m.rRange, cRange:m.cRange };
+  copyToSys(matrixToTSV(m.data));
+  if (cut) {
+    if (appState.selection.type === 'rows') {
+      const idxs = m.rRange.slice(); const backup = idxs.map(i => appState.rows[i].slice());
+      pushHistory({ label:'Zeilen ausschneiden', type:'delRows', indices: idxs, rowsBackup: backup });
+      const set = new Set(idxs); appState.rows = appState.rows.filter((_,i) => !set.has(i)); appState.selection = null;
+    } else {
+      const changes = [];
+      for (const r of m.rRange) for (const c of m.cRange) { const from = appState.rows[r][c] ?? ''; if (from !== '') changes.push({ r, c, from, to: '' }); }
+      if (changes.length) { pushHistory({ label:'Ausschneiden', type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ''; }
+    }
+    rebuildVisible(); renderAll();
+  }
+  toast(`${cut?'Ausgeschnitten':'Kopiert'}: ${m.data.length}×${m.data[0]?.length||0}`);
+}
+function doPaste(text) {
+  const data = parseTSV(text); if (!data.length) return;
+  const startR = appState.active.r, startC = appState.active.c;
+  const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden && i>=startC);
+  const visR = appState.visibleIndices;
+  const rPos = visR.indexOf(startR); if (rPos < 0) return;
+  const needCols = data[0].length; const newCols = []; let targetCols = [];
+  for (let k=0; k<needCols; k++) {
+    if (k < visC.length) targetCols.push(visC[k]);
+    else { const at = appState.headers.length; pushHistory({ label:'Spalte für Einfügen', type:'addCol', at, name:`Spalte ${at+1}`, width: DEFAULT_COL_WIDTH }); applyForward({ type:'addCol', at, name:`Spalte ${at+1}`, width: DEFAULT_COL_WIDTH }); newCols.push(at); targetCols.push(at); }
+  }
+  const newRows = [];
+  for (let i=0; i<data.length; i++) {
+    if (rPos + i >= visR.length) { const at = appState.rows.length; const r = appState.headers.map(()=>''); pushHistory({ label:'Zeile für Einfügen', type:'addRows', at, rowsData:[r.slice()] }); applyForward({ type:'addRows', at, rowsData:[r.slice()] }); newRows.push(at); }
+  }
+  rebuildVisible(); const visRupd = appState.visibleIndices;
+  const changes = [];
+  for (let i=0; i<data.length; i++) {
+    const targetR = (rPos + i < visRupd.length) ? visRupd[rPos + i] : newRows[i - (visRupd.length - rPos)];
+    for (let j=0; j<data[i].length && j<targetCols.length; j++) { const c = targetCols[j]; const from = appState.rows[targetR][c] ?? ''; const to = data[i][j]; if (from !== to) changes.push({ r: targetR, c, from, to }); }
+  }
+  if (changes.length) { pushHistory({ label:'Einfügen', type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ch.to; }
+  rebuildVisible();
+  const endVPos = Math.min(visRupd.length - 1, rPos + data.length - 1);
+  const endRow = endVPos >= 0 ? visRupd[endVPos] : (newRows[newRows.length-1] ?? startR);
+  selectRange(startR, targetCols[0], endRow, targetCols[targetCols.length-1]);
+  renderAll(); toast(`Eingefügt: ${data.length}×${data[0].length}`);
+}
+async function pasteFromSys() {
+  try { const t = await navigator.clipboard.readText(); if (t) doPaste(t); }
+  catch (_) { if (appState.clipboard) doPaste(matrixToTSV(appState.clipboard.data)); else toast('Zwischenablage nicht zugänglich.', 'error'); }
+}
+
+/* =============================================================
+   STRUCTURE OPS
+   ============================================================= */
+function addRow() { const at = appState.rows.length; const data = appState.headers.map(()=>''); pushHistory({ label:'Zeile hinzufügen', type:'addRows', at, rowsData:[data.slice()] }); applyForward({ type:'addRows', at, rowsData:[data.slice()] }); rebuildVisible(); renderAll(); }
+function addColumn() { const name = prompt('Name der neuen Spalte:', `Spalte ${appState.headers.length + 1}`); if (name === null) return; const at = appState.headers.length; const n = name.trim() || `Spalte ${at+1}`; pushHistory({ label:'Spalte hinzufügen', type:'addCol', at, name:n, width: DEFAULT_COL_WIDTH }); applyForward({ type:'addCol', at, name:n, width: DEFAULT_COL_WIDTH }); rebuildVisible(); renderAll(); }
+function insertRowAt(ri, pos) { const at = pos === 'before' ? ri : ri + 1; const data = appState.headers.map(()=>''); pushHistory({ label:'Zeile einfügen', type:'addRows', at, rowsData:[data.slice()] }); applyForward({ type:'addRows', at, rowsData:[data.slice()] }); rebuildVisible(); renderAll(); }
+function insertColAt(ci, pos) { const at = pos === 'before' ? ci : ci + 1; const name = `Spalte ${appState.headers.length+1}`; pushHistory({ label:'Spalte einfügen', type:'addCol', at, name, width: DEFAULT_COL_WIDTH }); applyForward({ type:'addCol', at, name, width: DEFAULT_COL_WIDTH }); rebuildVisible(); renderAll(); }
+function deleteSelectedRows() {
+  const sel = normalizedSel(); if (!sel) return;
+  const rows = appState.visibleIndices.filter(r => r>=sel.r1 && r<=sel.r2);
+  if (!rows.length) return;
+  if (rows.length > 50 && !confirm(`${rows.length} Zeile(n) löschen?`)) return;
+  const backup = rows.map(i => appState.rows[i].slice());
+  pushHistory({ label:`${rows.length} Zeile(n) löschen`, type:'delRows', indices: rows.slice(), rowsBackup: backup });
+  const set = new Set(rows); appState.rows = appState.rows.filter((_,i) => !set.has(i)); appState.selection = null;
+  rebuildVisible(); renderAll();
+}
+function deleteSelectedCols() {
+  const sel = normalizedSel(); if (!sel) return;
+  const cols = []; for (let c=sel.c1; c<=sel.c2; c++) cols.push(c);
+  if (!cols.length) return;
+  if (cols.length === appState.headers.length) { toast('Letzte Spalte nicht löschbar.', 'error'); return; }
+  if (cols.length > 3 && !confirm(`${cols.length} Spalte(n) löschen?`)) return;
+  const backup = cols.map(i => ({ header: appState.headers[i], col: { ...appState.cols[i] }, values: appState.rows.map(r => r[i]) }));
+  pushHistory({ label:`${cols.length} Spalte(n) löschen`, type:'delCols', indices: cols.slice(), backup });
+  const set = new Set(cols);
+  appState.headers = appState.headers.filter((_,i)=>!set.has(i)); appState.cols = appState.cols.filter((_,i)=>!set.has(i)); appState.rows = appState.rows.map(r => r.filter((_,i)=>!set.has(i)));
+  appState.selection = null; rebuildVisible(); renderAll();
+}
+function moveRow(from, to, pos) { if (from === to) return; let insertAt = (to > from) ? to - 1 : to; if (pos === 'after') insertAt += 1; insertAt = Math.max(0, Math.min(appState.rows.length - 1, insertAt)); if (insertAt === from) return; pushHistory({ label:'Zeile verschieben', type:'moveRow', from, to: insertAt }); const row = appState.rows.splice(from, 1)[0]; appState.rows.splice(insertAt, 0, row); rebuildVisible(); renderAll(); }
+function moveColumn(from, to, pos) { if (from === to) return; let insertAt = (to > from) ? to - 1 : to; if (pos === 'after') insertAt += 1; insertAt = Math.max(0, Math.min(appState.cols.length - 1, insertAt)); if (insertAt === from) return; pushHistory({ label:'Spalte verschieben', type:'moveCol', from, to: insertAt }); applyForward({ type:'moveCol', from, to: insertAt }); rebuildVisible(); renderAll(); }
+
+function hideColumn(ci) { pushHistory({ label:'Spalte ausblenden', type:'colMeta', c:ci, key:'hidden', from:false, to:true }); appState.cols[ci].hidden = true; renderAll(); }
+function showAllColumns() { const changes = []; for (let i=0; i<appState.cols.length; i++) if (appState.cols[i].hidden) changes.push(i); if (!changes.length) return; for (const i of changes) pushHistory({ label:'Spalten einblenden', type:'colMeta', c:i, key:'hidden', from:true, to:false }); for (const i of changes) appState.cols[i].hidden = false; renderAll(); }
+function togglePin(ci) { const cur = appState.cols[ci].pinned; pushHistory({ label: cur?'Fixierung aufheben':'Spalte fixieren', type:'colMeta', c:ci, key:'pinned', from:cur, to:!cur }); appState.cols[ci].pinned = !cur; renderAll(); }
+function autoFitColumn(ci) {
+  const canvas = autoFitColumn._cv || (autoFitColumn._cv = document.createElement('canvas'));
+  const ctx = canvas.getContext('2d');
+  ctx.font = '600 12.5px ' + getComputedStyle(document.body).fontFamily;
+  let maxW = ctx.measureText(appState.headers[ci] || '').width + 80;
+  ctx.font = '12.5px ' + getComputedStyle(document.body).fontFamily;
+  const t = ColumnTypes.effectiveType(ci);
+  const sample = appState.visibleIndices.slice(0, 500);
+  for (const r of sample) { const v = ColumnTypes.formatValue(appState.rows[r][ci] ?? '', t); const w = ctx.measureText(String(v)).width; if (w > maxW) maxW = w; }
+  const oldW = appState.cols[ci].width; const newW = Math.max(60, Math.min(600, Math.round(maxW + 22)));
+  if (oldW !== newW) { pushHistory({ label:'Auto-Breite', type:'colMeta', c:ci, key:'width', from:oldW, to:newW }); appState.cols[ci].width = newW; renderAll(); }
+}
+
+/* =============================================================
+   AUTOFILL
+   ============================================================= */
+function startAutoFill(e) { e.preventDefault(); e.stopPropagation(); const sel = normalizedSel(); if (!sel) return; autoFillOp = { startSel: {...sel}, currentR: sel.r2 }; document.body.style.cursor = 'crosshair'; }
+function showAutoFillPreview() {
+  document.querySelectorAll('.fill-preview').forEach(el => el.classList.remove('fill-preview'));
+  if (!autoFillOp) return;
+  const { startSel, currentR } = autoFillOp; if (currentR <= startSel.r2) return;
+  for (let r = startSel.r2 + 1; r <= currentR; r++) for (let c = startSel.c1; c <= startSel.c2; c++) { const td = document.querySelector(`.gcell[data-r="${r}"][data-c="${c}"]`); if (td) td.classList.add('fill-preview'); }
+}
+function commitAutoFill() {
+  document.querySelectorAll('.fill-preview').forEach(el => el.classList.remove('fill-preview'));
+  if (!autoFillOp) { document.body.style.cursor=''; return; }
+  const { startSel, currentR } = autoFillOp;
+  if (currentR > startSel.r2) {
+    const srcRows = []; const visR = appState.visibleIndices;
+    const srcIdx = visR.filter(r => r>=startSel.r1 && r<=startSel.r2);
+    for (const r of srcIdx) { const arr = []; for (let c=startSel.c1; c<=startSel.c2; c++) arr.push(appState.rows[r][c] ?? ''); srcRows.push(arr); }
+    const tgtIdx = visR.filter(r => r>startSel.r2 && r<=currentR);
+    const changes = [];
+    for (let i=0; i<tgtIdx.length; i++) {
+      const tgtR = tgtIdx[i];
+      for (let cc=0; cc<srcRows[0].length; cc++) {
+        const c = startSel.c1 + cc;
+        const colValues = srcRows.map(rw => rw[cc]);
+        const allNums = colValues.every(v => v !== '' && !isNaN(ColumnTypes.parseNumber(v)));
+        let newVal;
+        if (allNums && colValues.length >= 2) {
+          const nums = colValues.map(v => ColumnTypes.parseNumber(v));
+          const step = nums[nums.length-1] - nums[nums.length-2];
+          const next = nums[nums.length-1] + step * (i + 1);
+          const orig = colValues[colValues.length-1];
+          const useComma = String(orig).includes(',') && !String(orig).includes('.');
+          const decimals = (String(orig).split(/[.,]/)[1] || '').length;
+          newVal = decimals > 0 ? next.toFixed(decimals) : String(next);
+          if (useComma) newVal = newVal.replace('.', ',');
+        } else if (allNums && colValues.length === 1) {
+          const n = ColumnTypes.parseNumber(colValues[0]);
+          const useComma = String(colValues[0]).includes(',');
+          const next = n + (i + 1);
+          newVal = useComma ? String(next).replace('.', ',') : String(next);
+        } else newVal = colValues[i % colValues.length];
+        const from = appState.rows[tgtR][c] ?? '';
+        if (from !== newVal) changes.push({ r:tgtR, c, from, to:newVal });
+      }
+    }
+    if (changes.length) { pushHistory({ label:'AutoFill', type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ch.to; }
+    setSelection('cells', startSel.r1, startSel.c1, currentR, startSel.c2, startSel.r1, startSel.c1);
+    rebuildVisible(); renderAll();
+  }
+  autoFillOp = null; document.body.style.cursor = '';
+}
+
+/* =============================================================
+   CONTEXT MENU
+   ============================================================= */
+function typeLabel(t) { return t==='number'?'Zahl':t==='date'?'Datum':'Text'; }
+
+function showContextMenu(x, y, kind) {
+  hideContextMenu();
+  const host = document.getElementById('ctx-menu-host');
+  const menu = document.createElement('div'); menu.className = 'ctx-menu';
+  const isRows = appState.selection?.type === 'rows';
+  const isCols = appState.selection?.type === 'cols';
+  const items = [];
+  items.push({ label:'Kopieren', sc:'Strg+C', act:()=>doCopy(false) });
+  items.push({ label:'Ausschneiden', sc:'Strg+X', act:()=>doCopy(true) });
+  items.push({ label:'Einfügen', sc:'Strg+V', act:()=>pasteFromSys() });
+  items.push({ divider:true });
+  if (isRows || kind==='row') {
+    items.push({ label:'Zeile darüber einfügen', act:()=>insertRowAt(normalizedSel().r1,'before') });
+    items.push({ label:'Zeile darunter einfügen', act:()=>insertRowAt(normalizedSel().r2,'after') });
+    items.push({ divider:true });
+    // Bis-hier-einfrieren: benutzt die viewRow-Position
+    const sel1 = normalizedSel();
+    const vk = findViewRowByData(sel1.r1);
+    if (vk >= 0) {
+      const upTo = vk + 1;
+      items.push({ label:`Bis hier einfrieren (${upTo} Zeile${upTo>1?'n':''})`, act:()=>{ appState.frozenRows = Math.min(20, upTo); renderAll(); } });
+    }
+    if (appState.frozenRows > 0) items.push({ label:'Einfrieren aufheben', act:()=>{ appState.frozenRows = 0; renderAll(); } });
+    items.push({ divider:true });
+    items.push({ label:'Zeile(n) löschen', danger:true, act:()=>deleteSelectedRows() });
+  } else if (isCols) {
+    const ci = normalizedSel().c1;
+    const curType = appState.cols[ci].type || 'auto';
+    items.push({ label:'Spalte davor einfügen', act:()=>insertColAt(ci,'before') });
+    items.push({ label:'Spalte danach einfügen', act:()=>insertColAt(normalizedSel().c2,'after') });
+    items.push({ divider:true });
+    items.push({ label:`Filter… ${appState.cols[ci].filter?'(aktiv)':''}`.trim(), act:()=>{ const ref = document.querySelector(`[data-filt="${ci}"]`); const r = ref?.getBoundingClientRect(); openFilterPopup(ci, r?.left ?? x, (r?.bottom ?? y) + 4); } });
+    if (appState.groupBy === ci) items.push({ label:'Gruppierung aufheben', act:()=>{ appState.groupBy = null; appState.collapsedGroups = new Set(); buildViewRows(); renderAll(); } });
+    else items.push({ label:'Nach dieser Spalte gruppieren', act:()=>{ appState.groupBy = ci; appState.collapsedGroups = new Set(); buildViewRows(); renderAll(); } });
+    items.push({ divider:true });
+    items.push({ label:`Typ: ${curType==='auto'?'Auto':typeLabel(curType)} ${curType==='auto'?'('+typeLabel(ColumnTypes.effectiveType(ci))+')':''}`.trim(), submenu: 'type', ci });
+    items.push({ label: appState.cols[ci].pinned?'Fixierung aufheben':'Spalte fixieren', act:()=>togglePin(ci) });
+    items.push({ label:'Spalte ausblenden', act:()=>hideColumn(ci) });
+    items.push({ label:'Auto-Breite', act:()=>autoFitColumn(ci) });
+    items.push({ divider:true });
+    items.push({ label:'Spalte(n) löschen', danger:true, act:()=>deleteSelectedCols() });
+  } else {
+    items.push({ label:'Auswahl leeren', sc:'Entf', act:()=>clearSelectionValues() });
+    items.push({ divider:true });
+    items.push({ label:'Aktive Zeile löschen', danger:true, act:()=>{ selectRow(appState.active.r); deleteSelectedRows(); } });
+  }
+  menu.innerHTML = items.map(it => it.divider ? '<div class="divider"></div>' : `<div class="it ${it.danger?'danger':''}" ${it.submenu?'data-sub="'+it.submenu+'" data-ci="'+it.ci+'"':''}><span>${escapeHTML(it.label)}${it.submenu?' ▸':''}</span>${it.sc?`<span class="sc">${escapeHTML(it.sc)}</span>`:''}</div>`).join('');
+  host.appendChild(menu);
+  menu.style.left = x + 'px'; menu.style.top = y + 'px';
+  const r = menu.getBoundingClientRect();
+  if (r.right > innerWidth) menu.style.left = (innerWidth - r.width - 8) + 'px';
+  if (r.bottom > innerHeight) menu.style.top = (innerHeight - r.height - 8) + 'px';
+  const actItems = items.filter(it => !it.divider);
+  menu.querySelectorAll('.it').forEach((el, idx) => {
+    const it = actItems[idx];
+    el.addEventListener('click', e => {
+      if (it.submenu === 'type') { e.stopPropagation(); showTypeSubmenu(it.ci, el.getBoundingClientRect()); return; }
+      hideContextMenu(); it.act && it.act();
+    });
+  });
+  setTimeout(() => document.addEventListener('mousedown', onDocMouseDownCtx), 0);
+}
+function showTypeSubmenu(ci, anchorRect) {
+  const host = document.getElementById('ctx-menu-host');
+  const old = host.querySelector('.ctx-sub'); if (old) old.remove();
+  const sub = document.createElement('div'); sub.className = 'ctx-menu ctx-sub';
+  const cur = appState.cols[ci].type || 'auto';
+  const det = ColumnTypes.effectiveType(ci);
+  const types = [
+    { key:'auto', lbl:`Auto (${typeLabel(det)})` },
+    { key:'text', lbl:'Text' },
+    { key:'number', lbl:'Zahl' },
+    { key:'date', lbl:'Datum' },
+  ];
+  sub.innerHTML = types.map(t => `<div class="it" data-t="${t.key}"><span>${escapeHTML(t.lbl)}</span><span class="check">${cur===t.key?'✓':''}</span></div>`).join('');
+  host.appendChild(sub);
+  sub.style.left = (anchorRect.right + 2) + 'px';
+  sub.style.top = anchorRect.top + 'px';
+  const r = sub.getBoundingClientRect();
+  if (r.right > innerWidth) sub.style.left = (anchorRect.left - r.width - 2) + 'px';
+  sub.querySelectorAll('.it').forEach(el => el.addEventListener('click', () => {
+    const t = el.dataset.t;
+    if (t !== cur) { pushHistory({ label:'Spaltentyp ändern', type:'colMeta', c:ci, key:'type', from:cur, to:t }); appState.cols[ci].type = t; renderAll(); }
+    hideContextMenu();
+  }));
+}
+function onDocMouseDownCtx(e) { if (!e.target.closest('.ctx-menu')) hideContextMenu(); }
+function hideContextMenu() { document.getElementById('ctx-menu-host').innerHTML=''; document.removeEventListener('mousedown', onDocMouseDownCtx); }
+
+/* =============================================================
+   FILTER POPUP (NEU)
+   ============================================================= */
+let filterPopState = null; // { ci, tab:'values'|'range', selectedKeys:Set, search:'' , minStr, maxStr }
+function openFilterPopup(ci, x, y) {
+  hideFilterPopup(); hideContextMenu();
+  const type = ColumnTypes.effectiveType(ci);
+  const cur = appState.cols[ci].filter;
+  // Build state
+  filterPopState = {
+    ci, type,
+    tab: cur && cur.kind === 'range' ? 'range' : 'values',
+    excluded: new Set(cur && cur.kind === 'values' ? cur.excluded : []),
+    search: '',
+    minStr: cur && cur.kind === 'range' ? (type==='date' && cur.min != null ? formatDateISO(cur.min) : (cur.min != null ? String(cur.min).replace('.', ',') : '')) : '',
+    maxStr: cur && cur.kind === 'range' ? (type==='date' && cur.max != null ? formatDateISO(cur.max) : (cur.max != null ? String(cur.max).replace('.', ',') : '')) : '',
+  };
+  const host = document.getElementById('filter-pop-host');
+  const pop = document.createElement('div'); pop.className = 'filter-pop';
+  pop.innerHTML = renderFilterPopupHTML(ci);
+  host.appendChild(pop);
+  // Position
+  pop.style.left = x + 'px'; pop.style.top = y + 'px';
+  const r = pop.getBoundingClientRect();
+  if (r.right > innerWidth - 8) pop.style.left = (innerWidth - r.width - 8) + 'px';
+  if (r.bottom > innerHeight - 8) pop.style.top = (innerHeight - r.height - 8) + 'px';
+
+  bindFilterPopupEvents(pop);
+  setTimeout(() => document.addEventListener('mousedown', onDocFilter), 0);
+}
+function hideFilterPopup() { document.getElementById('filter-pop-host').innerHTML = ''; document.removeEventListener('mousedown', onDocFilter); filterPopState = null; }
+function onDocFilter(e) { if (!e.target.closest('.filter-pop') && !e.target.closest('[data-filt]')) hideFilterPopup(); }
+function formatDateISO(t) { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+function getUniqueValuesForCol(ci) {
+  // Sammelt Werte, ABER unter Berücksichtigung der OTHER Spaltenfilter (Excel-Verhalten)
+  const map = new Map(); // displayKey -> { display, count, raw }
+  const type = ColumnTypes.effectiveType(ci);
+  let truncated = false;
+  for (let r = 0; r < appState.rows.length; r++) {
+    // Prüfe alle anderen Spaltenfilter (außer ci selbst)
+    let pass = true;
+    for (let c = 0; c < appState.cols.length; c++) {
+      if (c === ci) continue;
+      const f = appState.cols[c].filter; if (!f) continue;
+      const v = appState.rows[r][c] ?? '';
+      if (f.kind === 'values') { const key = v === '' ? '__EMPTY__' : String(v); if (f.excluded && f.excluded.includes(key)) { pass = false; break; } }
+      else if (f.kind === 'range') {
+        const ct = ColumnTypes.effectiveType(c);
+        if (ct === 'number') { if (v === '' && (f.min!=null || f.max!=null)) { pass=false; break; } const n = ColumnTypes.parseNumber(v); if (isNaN(n)) { pass=false; break; } if (f.min != null && n < f.min) { pass=false; break; } if (f.max != null && n > f.max) { pass=false; break; } }
+        else if (ct === 'date') { if (v === '' && (f.min!=null || f.max!=null)) { pass=false; break; } const t = ColumnTypes.parseDate(v); if (isNaN(t)) { pass=false; break; } if (f.min != null && t < f.min) { pass=false; break; } if (f.max != null && t > f.max) { pass=false; break; } }
+      }
+    }
+    if (!pass) continue;
+    const raw = appState.rows[r][ci] ?? '';
+    const key = raw === '' ? '__EMPTY__' : String(raw);
+    const display = raw === '' ? '(Leer)' : ColumnTypes.formatValue(raw, type);
+    if (map.has(key)) map.get(key).count++;
+    else {
+      if (map.size >= FILTER_LIST_MAX) { truncated = true; continue; }
+      map.set(key, { key, display, raw, count: 1 });
+    }
+  }
+  // sort: empty last, then by type
+  const arr = Array.from(map.values());
+  arr.sort((a,b) => {
+    if (a.key === '__EMPTY__') return 1;
+    if (b.key === '__EMPTY__') return -1;
+    return ColumnTypes.compare(a.raw, b.raw, type);
+  });
+  return { values: arr, truncated };
+}
+
+function renderFilterPopupHTML(ci) {
+  const type = ColumnTypes.effectiveType(ci);
+  const headerName = appState.headers[ci];
+  const hasRangeTab = type === 'number' || type === 'date';
+  const tab = filterPopState.tab;
+
+  let html = `
+    <div class="fp-head">
+      <span class="type-ico t-${type}">${typeIconSVG(type)}</span>
+      <span class="title" title="${escapeAttr(headerName)}">${escapeHTML(headerName)}</span>
+      <span style="font-size:11px; color:var(--text-soft)">${typeLabel(type)}</span>
+    </div>
+    <div class="fp-sort">
+      <button data-sort="asc">${type==='date'?'Älteste ↑': type==='number'?'Klein ↑':'A ↑ Z'}</button>
+      <button data-sort="desc">${type==='date'?'Neueste ↓': type==='number'?'Groß ↓':'Z ↓ A'}</button>
+      <button data-sort="none">×</button>
+    </div>`;
+
+  if (hasRangeTab) {
+    html += `<div class="fp-tabs">
+      <button class="${tab==='values'?'active':''}" data-tab="values">Werte</button>
+      <button class="${tab==='range'?'active':''}" data-tab="range">Bereich</button>
+    </div>`;
+  }
+
+  if (tab === 'range' && hasRangeTab) {
+    const placeholder = type === 'date' ? 'YYYY-MM-DD' : '0';
+    html += `<div class="fp-range show">
+      <div class="row"><label>Von</label><input type="${type==='date'?'date':'text'}" data-r="min" value="${escapeAttr(filterPopState.minStr)}" placeholder="${placeholder}"/></div>
+      <div class="row"><label>Bis</label><input type="${type==='date'?'date':'text'}" data-r="max" value="${escapeAttr(filterPopState.maxStr)}" placeholder="${placeholder}"/></div>
+    </div>`;
+  } else {
+    html += `<div class="fp-search"><input type="text" placeholder="Werte durchsuchen…" data-fs/></div>
+      <div class="fp-list" id="fp-list"></div>`;
+  }
+  html += `<div class="fp-foot">
+    <button class="danger" data-act="clear">Zurücksetzen</button>
+    <button data-act="cancel">Abbrechen</button>
+    <button class="primary" data-act="ok">Anwenden</button>
+  </div>`;
+  return html;
+}
+
+function bindFilterPopupEvents(pop) {
+  const ci = filterPopState.ci;
+  const type = filterPopState.type;
+  const tab = filterPopState.tab;
+
+  pop.querySelectorAll('[data-sort]').forEach(btn => btn.addEventListener('click', () => {
+    const s = btn.dataset.sort;
+    if (s === 'none') { appState.sort = { col:-1, dir:0 }; }
+    else { appState.sort = { col: ci, dir: s === 'asc' ? 1 : -1 }; }
+    rebuildVisible(); renderAll();
+    // Don't close popup
+  }));
+
+  pop.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => {
+    filterPopState.tab = btn.dataset.tab;
+    pop.outerHTML;
+    // re-render
+    const host = document.getElementById('filter-pop-host');
+    const rect = pop.getBoundingClientRect();
+    host.innerHTML = '';
+    const np = document.createElement('div'); np.className='filter-pop'; np.innerHTML = renderFilterPopupHTML(ci);
+    np.style.left = rect.left + 'px'; np.style.top = rect.top + 'px';
+    host.appendChild(np);
+    bindFilterPopupEvents(np);
+  }));
+
+  if (tab === 'values') {
+    renderFilterValueList(pop);
+    const fs = pop.querySelector('[data-fs]');
+    fs.addEventListener('input', e => { filterPopState.search = e.target.value; renderFilterValueList(pop); });
+    fs.focus();
+  } else {
+    pop.querySelectorAll('[data-r]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        if (inp.dataset.r === 'min') filterPopState.minStr = inp.value;
+        else filterPopState.maxStr = inp.value;
+      });
+    });
+  }
+
+  pop.querySelector('[data-act="clear"]').addEventListener('click', () => {
+    const cur = appState.cols[ci].filter;
+    if (cur) { pushHistory({ label:'Filter zurücksetzen', type:'colFilter', c:ci, from:cur, to:null }); appState.cols[ci].filter = null; }
+    rebuildVisible(); renderAll(); hideFilterPopup();
+    toast(`Filter „${appState.headers[ci]}" entfernt.`);
+  });
+  pop.querySelector('[data-act="cancel"]').addEventListener('click', () => hideFilterPopup());
+  pop.querySelector('[data-act="ok"]').addEventListener('click', () => applyFilterPopup());
+}
+
+function renderFilterValueList(pop) {
+  const list = pop.querySelector('#fp-list'); if (!list) return;
+  const ci = filterPopState.ci;
+  const { values, truncated } = getUniqueValuesForCol(ci);
+  const q = (filterPopState.search || '').toLowerCase().trim();
+  const filteredVals = q ? values.filter(v => (v.display || '').toLowerCase().includes(q)) : values;
+  const exclSet = filterPopState.excluded;
+  const visibleKeys = filteredVals.map(v => v.key);
+  const allSelected = visibleKeys.every(k => !exclSet.has(k));
+  const someSelected = visibleKeys.some(k => !exclSet.has(k));
+
+  let html = '';
+  html += `<div class="it master"><input type="checkbox" data-master ${allSelected?'checked':''} ${(!allSelected && someSelected)?'data-indet':''} /><span class="v">(Alle auswählen${q?' – sichtbar':''})</span><span class="cnt">${filteredVals.length.toLocaleString('de-DE')}</span></div>`;
+  if (filteredVals.length === 0) html += `<div style="padding:14px 8px; color:var(--text-soft); font-size:12px; text-align:center">Keine Treffer</div>`;
+  for (const v of filteredVals) {
+    const checked = !exclSet.has(v.key);
+    const isEmpty = v.key === '__EMPTY__';
+    html += `<label class="it" data-k="${escapeAttr(v.key)}"><input type="checkbox" ${checked?'checked':''}/><span class="v ${isEmpty?'empty-v':''}" title="${escapeAttr(v.display)}">${escapeHTML(v.display)}</span><span class="cnt">${v.count.toLocaleString('de-DE')}</span></label>`;
+  }
+  if (truncated) html += `<div style="padding:8px; color:var(--warning); font-size:11px; text-align:center">Liste auf ${FILTER_LIST_MAX.toLocaleString('de-DE')} Werte begrenzt. Bitte Suche nutzen.</div>`;
+  list.innerHTML = html;
+
+  // Bind events
+  const master = list.querySelector('[data-master]');
+  if (master) {
+    if (master.hasAttribute('data-indet')) master.indeterminate = true;
+    master.addEventListener('change', () => {
+      if (master.checked) { for (const k of visibleKeys) exclSet.delete(k); }
+      else { for (const k of visibleKeys) exclSet.add(k); }
+      renderFilterValueList(pop);
+    });
+  }
+  list.querySelectorAll('label.it[data-k]').forEach(el => {
+    el.addEventListener('click', e => {
+      const cb = el.querySelector('input[type="checkbox"]');
+      if (e.target !== cb) cb.checked = !cb.checked;
+      const k = el.dataset.k;
+      if (cb.checked) exclSet.delete(k); else exclSet.add(k);
+      // Update master visually
+      const all = visibleKeys.every(k2 => !exclSet.has(k2));
+      const some = visibleKeys.some(k2 => !exclSet.has(k2));
+      master.checked = all;
+      master.indeterminate = !all && some;
+      e.preventDefault();
+    });
+  });
+}
+
+function applyFilterPopup() {
+  const ci = filterPopState.ci;
+  const type = filterPopState.type;
+  const cur = appState.cols[ci].filter;
+  let next = null;
+  if (filterPopState.tab === 'range') {
+    let min = null, max = null;
+    if (type === 'number') {
+      if (filterPopState.minStr.trim() !== '') { const n = ColumnTypes.parseNumber(filterPopState.minStr); if (!isNaN(n)) min = n; }
+      if (filterPopState.maxStr.trim() !== '') { const n = ColumnTypes.parseNumber(filterPopState.maxStr); if (!isNaN(n)) max = n; }
+    } else if (type === 'date') {
+      if (filterPopState.minStr.trim() !== '') { const t = ColumnTypes.parseDate(filterPopState.minStr); if (!isNaN(t)) min = t; }
+      if (filterPopState.maxStr.trim() !== '') { const t = ColumnTypes.parseDate(filterPopState.maxStr); if (!isNaN(t)) { // bis Tagesende
+        const d = new Date(t); d.setHours(23,59,59,999); max = d.getTime();
+      } }
+    }
+    if (min == null && max == null) next = null;
+    else next = { kind:'range', min, max };
+  } else {
+    const excluded = Array.from(filterPopState.excluded);
+    if (excluded.length === 0) next = null;
+    else next = { kind:'values', excluded };
+  }
+  const a = JSON.stringify(cur), b = JSON.stringify(next);
+  if (a !== b) {
+    pushHistory({ label: next ? 'Filter setzen' : 'Filter entfernen', type:'colFilter', c:ci, from: cur ? JSON.parse(JSON.stringify(cur)) : null, to: next ? JSON.parse(JSON.stringify(next)) : null });
+    appState.cols[ci].filter = next;
+    rebuildVisible(); renderAll();
+    toast(next ? `Filter „${appState.headers[ci]}" angewendet.` : `Filter „${appState.headers[ci]}" entfernt.`);
+  }
+  hideFilterPopup();
+}
+
+function clearAllFilters() {
+  const targets = [];
+  for (let i=0; i<appState.cols.length; i++) if (appState.cols[i].filter) targets.push(i);
+  if (!targets.length) return;
+  for (const i of targets) pushHistory({ label:'Alle Filter zurücksetzen', type:'colFilter', c:i, from: JSON.parse(JSON.stringify(appState.cols[i].filter)), to:null });
+  for (const i of targets) appState.cols[i].filter = null;
+  rebuildVisible(); renderAll();
+  toast(`${targets.length} Filter entfernt.`);
+}
+
+/* =============================================================
+   ACTIONS
+   ============================================================= */
+function clearSelectionValues() {
+  const sel = normalizedSel(); if (!sel) return;
+  const changes = [];
+  for (let r=sel.r1; r<=sel.r2; r++) for (let c=sel.c1; c<=sel.c2; c++) { if (!appState.rows[r]) continue; const from = appState.rows[r][c] ?? ''; if (from !== '') changes.push({ r, c, from, to:'' }); }
+  if (changes.length) { pushHistory({ label:'Auswahl leeren', type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ''; scheduleRender(); updateStatus(); if (hasAnyColFilter()) { rebuildVisible(); renderAll(); } }
+}
+function toggleSort(col) { if (appState.sort.col !== col) appState.sort = { col, dir:1 }; else { const d = appState.sort.dir; appState.sort.dir = d===1?-1:d===-1?0:1; if (appState.sort.dir===0) appState.sort.col = -1; } rebuildVisible(); renderAll(); }
+function newEmpty() {
+  appState.fileName = 'untitled.csv'; appState.fileSize = 0;
+  appState.headers = ['Spalte 1','Spalte 2','Spalte 3'];
+  appState.rows = [['','',''], ['','',''], ['','','']];
+  appState.cols = appState.headers.map(()=>({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', filter:null }));
+  appState.delimiter = ','; appState.sort = { col:-1, dir:0 }; appState.filter = '';
+  appState.selection = null; appState.active = {r:0,c:0}; appState.history = { past:[], future:[] }; appState.search = { hits:[], current:-1 };
+  appState.frozenRows = 0; appState.groupBy = null; appState.collapsedGroups = new Set();
+  document.getElementById('search-input').value = ''; document.getElementById('search-nav').style.display = 'none';
+  rebuildVisible(); renderAll();
+}
+/* =============================================================
+   EXPORT (Multi-Format: CSV / TSV / Markdown / XLSX)
+   ============================================================= */
+function exportedRows() {
+  // Respektiert Sortierung, Volltext- und Spaltenfilter; nur sichtbare Spalten in deren Anzeigereihenfolge.
+  const cols = visibleCols().map(c => c.ci);
+  const headers = cols.map(ci => appState.headers[ci]);
+  const types = cols.map(ci => ColumnTypes.effectiveType(ci));
+  const rows = appState.visibleIndices.map(ri => cols.map(ci => appState.rows[ri][ci] ?? ''));
+  return { cols, headers, types, rows };
+}
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function baseFileName() {
+  const n = appState.fileName || 'export.csv';
+  return n.replace(/\.[^.]+$/, '');
+}
+
+function exportCSV() {
+  showLoading('Erzeuge CSV…');
+  setTimeout(() => {
+    const { headers, rows } = exportedRows();
+    const csv = serializeCSV(headers, rows, appState.delimiter);
+    downloadBlob(new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' }), baseFileName() + '.csv');
+    hideLoading(); toast('CSV gespeichert.', 'success');
+  }, 0);
+}
+function exportTSV() {
+  showLoading('Erzeuge TSV…');
+  setTimeout(() => {
+    const { headers, rows } = exportedRows();
+    const tsv = serializeCSV(headers, rows, '\t');
+    downloadBlob(new Blob(['\uFEFF' + tsv], { type:'text/tab-separated-values;charset=utf-8;' }), baseFileName() + '.tsv');
+    hideLoading(); toast('TSV gespeichert.', 'success');
+  }, 0);
+}
+
+/* ---------- Markdown ---------- */
+function escMD(v) {
+  return String(v ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n/g, '<br>');
+}
+function buildMarkdown() {
+  const { headers, types, rows } = exportedRows();
+  if (!headers.length) return '';
+  const display = rows.map(r => r.map((v, j) => escMD(ColumnTypes.formatValue(v, types[j]))));
+  const widths = headers.map((h, j) => {
+    let w = escMD(h).length;
+    for (const r of display) if (r[j].length > w) w = r[j].length;
+    return Math.min(Math.max(w, 3), 40);
+  });
+  const pad = (s, n, t) => {
+    if (s.length >= n) return s;
+    const fill = ' '.repeat(n - s.length);
+    return (t === 'number' || t === 'date') ? fill + s : s + fill;
+  };
+  const lines = [];
+  lines.push('| ' + headers.map((h, j) => pad(escMD(h), widths[j], types[j])).join(' | ') + ' |');
+  lines.push('| ' + types.map((t, j) => {
+    const w = widths[j];
+    if (t === 'number' || t === 'date') return '-'.repeat(Math.max(3, w - 1)) + ':';
+    return ':' + '-'.repeat(Math.max(3, w - 1));
+  }).join(' | ') + ' |');
+  for (const r of display) lines.push('| ' + r.map((c, j) => pad(c, widths[j], types[j])).join(' | ') + ' |');
+  return lines.join('\n') + '\n';
+}
+function exportMarkdown() {
+  showLoading('Erzeuge Markdown…');
+  setTimeout(() => {
+    const md = buildMarkdown();
+    downloadBlob(new Blob([md], { type:'text/markdown;charset=utf-8;' }), baseFileName() + '.md');
+    hideLoading(); toast('Markdown gespeichert.', 'success');
+  }, 0);
+}
+async function copyMarkdown() {
+  if (!appState.headers.length) return;
+  const md = buildMarkdown();
+  const ok = await copyToSys(md);
+  if (ok) {
+    const lines = md.split('\n').length - 2;
+    toast(`Markdown kopiert (${lines} Zeile${lines!==1?'n':''}).`, 'success');
+  } else {
+    toast('Zwischenablage nicht zugänglich.', 'error');
+  }
+}
+
+/* ---------- JSON ---------- */
+function typedForJSON(v, t) {
+  if (v === '' || v == null) return null;
+  if (t === 'number') { const n = ColumnTypes.parseNumber(v); return isNaN(n) ? String(v) : n; }
+  if (t === 'date') {
+    const tt = ColumnTypes.parseDate(v);
+    if (isNaN(tt)) return String(v);
+    const d = new Date(tt);
+    const hasTime = /[ T]\d{1,2}:\d{1,2}/.test(String(v));
+    const iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    if (hasTime) return iso + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+    return iso;
+  }
+  return String(v);
+}
+function buildJSON() {
+  const { headers, types, rows } = exportedRows();
+  const arr = rows.map(r => {
+    const o = {};
+    for (let j=0; j<headers.length; j++) o[headers[j]] = typedForJSON(r[j], types[j]);
+    return o;
+  });
+  return JSON.stringify(arr, null, 2);
+}
+function exportJSON() {
+  showLoading('Erzeuge JSON…');
+  setTimeout(() => {
+    const json = buildJSON();
+    downloadBlob(new Blob([json], { type:'application/json;charset=utf-8;' }), baseFileName() + '.json');
+    hideLoading(); toast('JSON gespeichert.', 'success');
+  }, 0);
+}
+
+/* ---------- HTML ---------- */
+function buildHTML() {
+  const { headers, types, rows } = exportedRows();
+  const title = baseFileName() || 'Tabelle';
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const align = t => (t === 'number' || t === 'date') ? 'right' : 'left';
+  const style = `
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin:24px; color:${dark?'#e8eaee':'#1c2330'}; background:${dark?'#0e1218':'#ffffff'}; }
+    h1 { font-size:18px; margin:0 0 12px; font-weight:600; }
+    .meta { color:${dark?'#9aa4b2':'#5b6573'}; font-size:12px; margin-bottom:14px; }
+    table { border-collapse:collapse; width:100%; font-size:13px; }
+    th, td { padding:6px 10px; border:1px solid ${dark?'#252b37':'#e3e6ea'}; vertical-align:top; }
+    th { background:${dark?'#1a2029':'#f7f8fa'}; font-weight:600; text-align:left; position:sticky; top:0; }
+    tr:nth-child(even) td { background:${dark?'rgba(255,255,255,.02)':'rgba(0,0,0,.02)'}; }
+    td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
+    td.date, th.date { text-align:right; font-variant-numeric: tabular-nums; }
+  `;
+  const thead = headers.map((h, j) => `<th class="${types[j]==='number'?'num':types[j]==='date'?'date':''}">${escapeHTML(h)}</th>`).join('');
+  const tbody = rows.map(r => '<tr>' + r.map((v, j) => {
+    const disp = ColumnTypes.formatValue(v, types[j]);
+    const cls = types[j] === 'number' ? 'num' : types[j] === 'date' ? 'date' : '';
+    return `<td class="${cls}">${escapeHTML(disp)}</td>`;
+  }).join('') + '</tr>').join('\n');
+  return `<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<title>${escapeHTML(title)}</title>
+<style>${style}</style>
+</head>
+<body>
+<h1>${escapeHTML(title)}</h1>
+<div class="meta">${rows.length.toLocaleString('de-DE')} Zeilen × ${headers.length} Spalten · exportiert ${new Date().toLocaleString('de-DE')}</div>
+<table>
+<thead><tr>${thead}</tr></thead>
+<tbody>
+${tbody}
+</tbody>
+</table>
+</body>
+</html>`;
+}
+function exportHTML() {
+  showLoading('Erzeuge HTML…');
+  setTimeout(() => {
+    const html = buildHTML();
+    downloadBlob(new Blob([html], { type:'text/html;charset=utf-8;' }), baseFileName() + '.html');
+    hideLoading(); toast('HTML gespeichert.', 'success');
+  }, 0);
+}
+
+/* ---------- Jira / Confluence Wiki-Markup ---------- */
+function escJira(v) {
+  // Jira/Confluence: | trennt Zellen, ! umschließt Bilder, [] Links, {} Makros.
+  // Für Zellinhalt reicht Pipe- und Newline-Escaping.
+  return String(v ?? '')
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n/g, ' \\\\ ');  // Jira Wiki: \\ erzwingt Zeilenumbruch
+}
+function buildJira() {
+  const { headers, types, rows } = exportedRows();
+  if (!headers.length) return '';
+  const lines = [];
+  // Header-Zeile: doppelte Pipes
+  lines.push('||' + headers.map(h => escJira(h)).join('||') + '||');
+  // Datenzeilen: einfache Pipes; leere Zellen als einzelnes Leerzeichen (sonst kollabiert die Zelle)
+  for (const r of rows) {
+    lines.push('|' + r.map((v, j) => {
+      const s = escJira(ColumnTypes.formatValue(v, types[j]));
+      return s === '' ? ' ' : s;
+    }).join('|') + '|');
+  }
+  return lines.join('\n') + '\n';
+}
+function exportJira() {
+  showLoading('Erzeuge Jira/Confluence-Markup…');
+  setTimeout(() => {
+    const txt = buildJira();
+    downloadBlob(new Blob([txt], { type:'text/plain;charset=utf-8;' }), baseFileName() + '.jira.txt');
+    hideLoading(); toast('Jira/Confluence-Datei gespeichert.', 'success');
+  }, 0);
+}
+async function copyJira() {
+  if (!appState.headers.length) return;
+  const txt = buildJira();
+  const ok = await copyToSys(txt);
+  if (ok) {
+    const lines = txt.split('\n').length - 1;
+    toast(`Jira/Confluence-Markup kopiert (${lines} Zeile${lines!==1?'n':''}).`, 'success');
+  } else {
+    toast('Zwischenablage nicht zugänglich.', 'error');
+  }
+}
+
+/* ---------- XLSX (ohne externe Bibliothek) ---------- */
+const CRC32 = (() => {
+  let table = null;
+  function makeTable() { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; }
+  return function crc32(bytes) {
+    if (!table) table = makeTable();
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = table[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+})();
+function zipStore(entries) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  for (const e of entries) {
+    const nameBytes = enc.encode(e.name);
+    const crc = CRC32(e.data);
+    const size = e.data.length;
+    const lfh = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(lfh.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, 0, true);
+    lv.setUint16(12, 0x21, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    lfh.set(nameBytes, 30);
+    chunks.push(lfh, e.data);
+
+    const cdh = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(cdh.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0x21, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    cdh.set(nameBytes, 46);
+    central.push(cdh);
+
+    offset += lfh.length + size;
+  }
+  const cdStart = offset;
+  let cdSize = 0;
+  for (const c of central) cdSize += c.length;
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, entries.length, true);
+  ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, cdSize, true);
+  ev.setUint32(16, cdStart, true);
+  ev.setUint16(20, 0, true);
+  const all = [...chunks, ...central, eocd];
+  let total = 0; for (const a of all) total += a.length;
+  const out = new Uint8Array(total);
+  let p = 0; for (const a of all) { out.set(a, p); p += a.length; }
+  return out;
+}
+function xmlEsc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+function dateToExcelSerial(t) {
+  const epoch = Date.UTC(1899, 11, 30);
+  const d = new Date(t);
+  const localUTC = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
+  return (localUTC - epoch) / 86400000;
+}
+function colLetter(n) {
+  let s = ''; n = n + 1;
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+function buildXLSX() {
+  const { headers, types, rows } = exportedRows();
+  const enc = new TextEncoder();
+
+  const sheetLines = [];
+  sheetLines.push('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+  sheetLines.push('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">');
+  sheetLines.push('<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>');
+
+  const exportedColIdx = visibleCols().map(c => c.ci);
+  sheetLines.push('<cols>');
+  exportedColIdx.forEach((ci, j) => {
+    const w = appState.cols[ci].width;
+    const excelW = Math.max(8, Math.min(80, w / 7));
+    sheetLines.push(`<col min="${j+1}" max="${j+1}" width="${excelW.toFixed(2)}" customWidth="1"/>`);
+  });
+  sheetLines.push('</cols>');
+  sheetLines.push('<sheetData>');
+  sheetLines.push(`<row r="1">`);
+  headers.forEach((h, j) => {
+    const ref = colLetter(j) + '1';
+    sheetLines.push(`<c r="${ref}" t="inlineStr" s="1"><is><t xml:space="preserve">${xmlEsc(h)}</t></is></c>`);
+  });
+  sheetLines.push('</row>');
+  for (let i = 0; i < rows.length; i++) {
+    const rowNum = i + 2;
+    sheetLines.push(`<row r="${rowNum}">`);
+    for (let j = 0; j < rows[i].length; j++) {
+      const ref = colLetter(j) + rowNum;
+      const raw = rows[i][j];
+      const t = types[j];
+      if (raw === '' || raw == null) continue;
+      if (t === 'number') {
+        const n = ColumnTypes.parseNumber(raw);
+        if (!isNaN(n)) { sheetLines.push(`<c r="${ref}" t="n"><v>${n}</v></c>`); continue; }
+      } else if (t === 'date') {
+        const tt = ColumnTypes.parseDate(raw);
+        if (!isNaN(tt)) {
+          const serial = dateToExcelSerial(tt);
+          const hasTime = /[ T]\d{1,2}:\d{1,2}/.test(String(raw));
+          const style = hasTime ? 3 : 2;
+          sheetLines.push(`<c r="${ref}" s="${style}" t="n"><v>${serial}</v></c>`);
+          continue;
+        }
+      }
+      sheetLines.push(`<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(raw)}</t></is></c>`);
+    }
+    sheetLines.push('</row>');
+  }
+  sheetLines.push('</sheetData>');
+  if (headers.length > 0 && rows.length > 0) {
+    const lastRef = colLetter(headers.length - 1) + (rows.length + 1);
+    sheetLines.push(`<autoFilter ref="A1:${lastRef}"/>`);
+  }
+  sheetLines.push('</worksheet>');
+  const sheetXML = sheetLines.join('');
+
+  const stylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="2"><numFmt numFmtId="164" formatCode="DD.MM.YYYY"/><numFmt numFmtId="165" formatCode="DD.MM.YYYY HH:MM"/></numFmts>
+<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+<borders count="1"><border/></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0"/></cellStyleXfs>
+<cellXfs count="4"><xf numFmtId="0" fontId="0" xfId="0"/><xf numFmtId="0" fontId="1" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="165" fontId="0" xfId="0" applyNumberFormat="1"/></cellXfs>
+<cellStyles count="1"><cellStyle name="Standard" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+  const workbookXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Daten" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`;
+
+  const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+
+  const files = [
+    { name: '[Content_Types].xml',        data: enc.encode(contentTypes) },
+    { name: '_rels/.rels',                data: enc.encode(rootRels) },
+    { name: 'xl/workbook.xml',            data: enc.encode(workbookXML) },
+    { name: 'xl/_rels/workbook.xml.rels', data: enc.encode(workbookRels) },
+    { name: 'xl/styles.xml',              data: enc.encode(stylesXML) },
+    { name: 'xl/worksheets/sheet1.xml',   data: enc.encode(sheetXML) },
+  ];
+  return zipStore(files);
+}
+function exportXLSX() {
+  showLoading('Erzeuge Excel-Datei…', 'Bitte einen Moment…');
+  setTimeout(() => {
+    try {
+      const bytes = buildXLSX();
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      downloadBlob(blob, baseFileName() + '.xlsx');
+      hideLoading(); toast('Excel-Datei gespeichert.', 'success');
+    } catch (err) {
+      console.error(err);
+      hideLoading(); toast('Fehler beim XLSX-Export: ' + err.message, 'error');
+    }
+  }, 0);
+}
+
+function showViewMenu() {
+  const host = document.getElementById('opts-menu-host');
+  host.innerHTML = '';
+  const btn = document.getElementById('btn-view');
+  const r = btn.getBoundingClientRect();
+  const menu = document.createElement('div'); menu.className = 'menu-pop';
+  menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 4) + 'px';
+  menu.style.minWidth = '260px';
+
+  const groupItems = appState.headers.map((h, i) =>
+    `<label class="it"><input type="radio" name="gb" value="${i}" ${appState.groupBy===i?'checked':''}/> ${escapeHTML(h)}</label>`
+  ).join('');
+
+  menu.innerHTML = `
+    <div class="subhead">Zeilen einfrieren</div>
+    <label class="it"><input type="radio" name="fz" value="0" ${appState.frozenRows===0?'checked':''}/> Keine</label>
+    <label class="it"><input type="radio" name="fz" value="1" ${appState.frozenRows===1?'checked':''}/> Erste Zeile</label>
+    <label class="it"><input type="radio" name="fz" value="3" ${appState.frozenRows===3?'checked':''}/> Erste 3 Zeilen</label>
+    <label class="it"><input type="radio" name="fz" value="5" ${appState.frozenRows===5?'checked':''}/> Erste 5 Zeilen</label>
+    <div class="it" id="fz-custom"><span>Eigene Anzahl…</span><span class="sc">${appState.frozenRows>5?appState.frozenRows:''}</span></div>
+    <div class="divider"></div>
+    <div class="subhead">Gruppieren nach</div>
+    <label class="it"><input type="radio" name="gb" value="" ${appState.groupBy==null?'checked':''}/> Keine Gruppierung</label>
+    ${groupItems}
+    ${appState.groupBy!=null ? '<div class="divider"></div><div class="it" id="gb-expand">Alle Gruppen ausklappen</div><div class="it" id="gb-collapse">Alle Gruppen einklappen</div>' : ''}
+    <div class="divider"></div>
+    <div class="subhead">Zeilenhöhe</div>
+    <label class="it"><input type="radio" name="rh" value="22" ${appState.rowH===22?'checked':''}/> Kompakt (22 px)</label>
+    <label class="it"><input type="radio" name="rh" value="28" ${appState.rowH===28?'checked':''}/> Normal (28 px)</label>
+    <label class="it"><input type="radio" name="rh" value="36" ${appState.rowH===36?'checked':''}/> Bequem (36 px)</label>
+    <label class="it"><input type="radio" name="rh" value="48" ${appState.rowH===48?'checked':''}/> Groß (48 px)</label>
+    <div class="it" id="rh-custom"><span>Eigene Höhe…</span><span class="sc">${![22,28,36,48].includes(appState.rowH)?appState.rowH+' px':''}</span></div>
+  `;
+  host.appendChild(menu);
+
+  menu.querySelectorAll('input[name="fz"]').forEach(el => el.addEventListener('change', () => {
+    appState.frozenRows = +el.value; renderAll();
+  }));
+  menu.querySelector('#fz-custom').addEventListener('click', () => {
+    const cur = appState.frozenRows;
+    const s = prompt(`Anzahl eingefrorener Zeilen (0–20):`, String(cur));
+    if (s === null) return;
+    const n = Math.max(0, Math.min(20, parseInt(s, 10) || 0));
+    appState.frozenRows = n; host.innerHTML=''; renderAll();
+  });
+  menu.querySelectorAll('input[name="gb"]').forEach(el => el.addEventListener('change', () => {
+    appState.groupBy = el.value === '' ? null : +el.value;
+    appState.collapsedGroups = new Set();
+    buildViewRows(); renderAll();
+  }));
+  const gbExp = menu.querySelector('#gb-expand'); if (gbExp) gbExp.addEventListener('click', () => { appState.collapsedGroups = new Set(); buildViewRows(); renderAll(); host.innerHTML=''; });
+  const gbCol = menu.querySelector('#gb-collapse'); if (gbCol) gbCol.addEventListener('click', () => { appState.collapsedGroups = new Set(); for (const v of appState.viewRows) if (v.kind==='group') appState.collapsedGroups.add(v.groupKey); buildViewRows(); renderAll(); host.innerHTML=''; });
+  menu.querySelectorAll('input[name="rh"]').forEach(el => el.addEventListener('change', () => {
+    applyRowHeight(+el.value); renderAll();
+  }));
+  menu.querySelector('#rh-custom').addEventListener('click', () => {
+    const s = prompt(`Zeilenhöhe in Pixel (${ROW_H_MIN}–${ROW_H_MAX}):`, String(appState.rowH));
+    if (s === null) return;
+    const n = parseInt(s, 10);
+    if (isNaN(n)) return;
+    applyRowHeight(n); host.innerHTML=''; renderAll();
+  });
+  setTimeout(() => document.addEventListener('mousedown', onDocView), 0);
+}
+function onDocView(e) { if (!e.target.closest('.menu-pop') && !e.target.closest('#btn-view')) { document.getElementById('opts-menu-host').innerHTML = ''; document.removeEventListener('mousedown', onDocView); } }
+
+function showExportMenu() {
+  const host = document.getElementById('opts-menu-host');
+  host.innerHTML = '';
+  const btn = document.getElementById('btn-export');
+  const r = btn.getBoundingClientRect();
+  const menu = document.createElement('div'); menu.className = 'menu-pop';
+  menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 4) + 'px';
+  menu.style.minWidth = '240px';
+  const n = appState.visibleIndices.length;
+  menu.innerHTML = `
+    <div class="subhead">Exportieren als…</div>
+    <div class="it" data-fmt="csv"><span>CSV <span style="color:var(--text-soft); font-size:11px">(.csv, UTF-8)</span></span><span class="sc">Strg+S</span></div>
+    <div class="it" data-fmt="tsv"><span>TSV <span style="color:var(--text-soft); font-size:11px">(.tsv, Tab)</span></span></div>
+    <div class="it" data-fmt="md"><span>Markdown <span style="color:var(--text-soft); font-size:11px">(.md, GFM-Tabelle)</span></span></div>
+    <div class="it" data-fmt="md-clip"><span>Markdown in Zwischenablage <span style="color:var(--text-soft); font-size:11px">(zum Einfügen)</span></span><span class="sc">Strg+⇧+M</span></div>
+    <div class="it" data-fmt="jira"><span>Jira / Confluence <span style="color:var(--text-soft); font-size:11px">(.txt, Wiki-Markup)</span></span></div>
+    <div class="it" data-fmt="jira-clip"><span>Jira / Confluence in Zwischenablage <span style="color:var(--text-soft); font-size:11px">(zum Einfügen)</span></span><span class="sc">Strg+⇧+J</span></div>
+    <div class="it" data-fmt="json"><span>JSON <span style="color:var(--text-soft); font-size:11px">(.json, Array of Objects)</span></span></div>
+    <div class="it" data-fmt="html"><span>HTML <span style="color:var(--text-soft); font-size:11px">(.html, styled Tabelle)</span></span></div>
+    <div class="it" data-fmt="xlsx"><span>Excel <span style="color:var(--text-soft); font-size:11px">(.xlsx)</span></span></div>
+    <div class="divider"></div>
+    <div style="padding:4px 10px; color:var(--text-soft); font-size:11px">${n.toLocaleString('de-DE')} Zeilen × ${visibleCols().length} Spalten<br/>(sichtbare nach Filter/Sortierung)</div>
+  `;
+  host.appendChild(menu);
+  menu.querySelectorAll('[data-fmt]').forEach(el => el.addEventListener('click', () => {
+    host.innerHTML = ''; document.removeEventListener('mousedown', onDocExport);
+    const fmt = el.dataset.fmt;
+    if (fmt === 'csv') exportCSV();
+    else if (fmt === 'tsv') exportTSV();
+    else if (fmt === 'md') exportMarkdown();
+    else if (fmt === 'md-clip') copyMarkdown();
+    else if (fmt === 'jira') exportJira();
+    else if (fmt === 'jira-clip') copyJira();
+    else if (fmt === 'json') exportJSON();
+    else if (fmt === 'html') exportHTML();
+    else if (fmt === 'xlsx') exportXLSX();
+  }));
+  setTimeout(() => document.addEventListener('mousedown', onDocExport), 0);
+}
+function onDocExport(e) { if (!e.target.closest('.menu-pop') && !e.target.closest('#btn-export')) { document.getElementById('opts-menu-host').innerHTML = ''; document.removeEventListener('mousedown', onDocExport); } }
+
+/* =============================================================
+   SEARCH
+   ============================================================= */
+function performSearch(q) {
+  appState.filter = q; rebuildVisible();
+  const hits = [];
+  if (q) {
+    const ql = q.toLowerCase();
+    const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden);
+    outer: for (const r of appState.visibleIndices) for (const c of visC) {
+      if (String(appState.rows[r][c] ?? '').toLowerCase().includes(ql)) { hits.push({ r, c }); if (hits.length >= 5000) break outer; }
+    }
+  }
+  appState.search.hits = hits; appState.search.current = hits.length ? 0 : -1;
+  const nav = document.getElementById('search-nav');
+  if (q && hits.length) { nav.style.display = 'flex'; document.getElementById('search-count').textContent = `${hits.length ? 1 : 0}/${hits.length.toLocaleString('de-DE')}`; }
+  else if (q) { nav.style.display = 'flex'; document.getElementById('search-count').textContent = `0/0`; }
+  else nav.style.display = 'none';
+  renderAll();
+  if (appState.search.current >= 0) jumpToHit(0);
+}
+function jumpToHit(delta) {
+  const total = appState.search.hits.length; if (!total) return;
+  appState.search.current = (appState.search.current + delta + total) % total;
+  document.getElementById('search-count').textContent = `${appState.search.current + 1}/${total.toLocaleString('de-DE')}`;
+  const h = appState.search.hits[appState.search.current]; selectCell(h.r, h.c); scrollIntoView(h.r, h.c); scheduleRender();
+}
+
+/* =============================================================
+   SUCHEN & ERSETZEN (Strg+H)
+   ============================================================= */
+const SRState = { compiledRegex: null, error: '', matches: [] };
+function openSRModal() {
+  if (!appState.headers.length) return;
+  const modal = document.getElementById('sr-modal');
+  modal.classList.add('show');
+  document.getElementById('sr-find').focus();
+  document.getElementById('sr-find').select();
+  updateSRPreview();
+}
+function closeSRModal() { document.getElementById('sr-modal').classList.remove('show'); }
+function srReadOpts() {
+  return {
+    find: document.getElementById('sr-find').value,
+    repl: document.getElementById('sr-repl').value,
+    caseSens: document.getElementById('sr-case').checked,
+    whole: document.getElementById('sr-whole').checked,
+    regex: document.getElementById('sr-regex').checked,
+    selOnly: document.getElementById('sr-selonly').checked,
+    colsOnly: document.getElementById('sr-cols').checked,
+  };
+}
+function srCompile(opts) {
+  SRState.error = '';
+  if (!opts.find) { SRState.compiledRegex = null; return; }
+  try {
+    if (opts.regex) {
+      SRState.compiledRegex = new RegExp(opts.find, opts.caseSens ? 'g' : 'gi');
+    } else {
+      const escaped = opts.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = opts.whole ? '^' + escaped + '$' : escaped;
+      SRState.compiledRegex = new RegExp(pattern, opts.caseSens ? 'g' : 'gi');
+    }
+  } catch (err) {
+    SRState.error = 'Regex-Fehler: ' + err.message;
+    SRState.compiledRegex = null;
+  }
+}
+function srScope(opts) {
+  // Ermittelt (r, c)-Bereich, in dem gesucht/ersetzt wird
+  const rows = new Set(appState.visibleIndices);
+  const cols = new Set(appState.cols.map((c,i) => c.hidden ? -1 : i).filter(i => i >= 0));
+  const sel = normalizedSel();
+  if (opts.selOnly && sel) {
+    const rFiltered = new Set();
+    for (const r of rows) if (r >= sel.r1 && r <= sel.r2) rFiltered.add(r);
+    const cFiltered = new Set();
+    for (const c of cols) if (c >= sel.c1 && c <= sel.c2) cFiltered.add(c);
+    return { rows: rFiltered, cols: cFiltered };
+  }
+  if (opts.colsOnly && sel) {
+    const cFiltered = new Set();
+    for (const c of cols) if (c >= sel.c1 && c <= sel.c2) cFiltered.add(c);
+    return { rows, cols: cFiltered };
+  }
+  return { rows, cols };
+}
+function srFindMatches(opts, limit=Infinity) {
+  const matches = [];
+  if (!SRState.compiledRegex) return matches;
+  const rx = SRState.compiledRegex;
+  const { rows, cols } = srScope(opts);
+  outer: for (const r of rows) {
+    for (const c of cols) {
+      const v = String(appState.rows[r]?.[c] ?? '');
+      rx.lastIndex = 0;
+      if (opts.whole && !opts.regex) {
+        if (rx.test(v)) matches.push({ r, c, from: v, to: opts.repl });
+      } else {
+        if (rx.test(v)) {
+          rx.lastIndex = 0;
+          const replaced = v.replace(rx, opts.repl);
+          if (replaced !== v) matches.push({ r, c, from: v, to: replaced });
+        }
+      }
+      if (matches.length >= limit) break outer;
+    }
+  }
+  return matches;
+}
+function updateSRPreview() {
+  const opts = srReadOpts();
+  srCompile(opts);
+  const errEl = document.getElementById('sr-error');
+  errEl.textContent = SRState.error;
+  const preview = document.getElementById('sr-preview');
+  const info = document.getElementById('sr-info');
+  const btn = document.getElementById('sr-replace-all');
+  if (!opts.find || SRState.error) {
+    preview.innerHTML = '<div class="empty">' + (SRState.error ? '&nbsp;' : 'Suchtext eingeben für Vorschau…') + '</div>';
+    info.textContent = '';
+    btn.disabled = true;
+    return;
+  }
+  const totalMatches = srFindMatches(opts, 10000);
+  SRState.matches = totalMatches;
+  if (!totalMatches.length) {
+    preview.innerHTML = '<div class="empty">Keine Treffer</div>';
+    info.textContent = '0 Treffer';
+    btn.disabled = true;
+    return;
+  }
+  const shown = totalMatches.slice(0, 30);
+  const rowsHtml = shown.map(m => {
+    const oldHTML = escapeHTML(m.from);
+    const newHTML = escapeHTML(m.to);
+    return `<div class="row"><span class="cell-loc">Z${m.r+1}·S${m.c+1}</span><span class="cell-old" title="${escapeAttr(m.from)}">${oldHTML}</span><span class="cell-arrow">→</span><span class="cell-new" title="${escapeAttr(m.to)}">${newHTML}</span></div>`;
+  }).join('');
+  const more = totalMatches.length > 30 ? `<div class="empty">… und ${(totalMatches.length - 30).toLocaleString('de-DE')} weitere</div>` : '';
+  preview.innerHTML = rowsHtml + more;
+  info.textContent = `${totalMatches.length.toLocaleString('de-DE')} Treffer in ${new Set(totalMatches.map(m => m.r)).size.toLocaleString('de-DE')} Zeilen`;
+  btn.disabled = false;
+}
+function srReplaceAll() {
+  const opts = srReadOpts();
+  srCompile(opts);
+  if (SRState.error || !SRState.compiledRegex) return;
+  const matches = srFindMatches(opts);
+  if (!matches.length) { toast('Keine Treffer.', 'warn'); return; }
+  if (matches.length > 500 && !confirm(`${matches.length} Zellen ersetzen?`)) return;
+  const changes = matches.filter(m => m.from !== m.to).map(m => ({ r: m.r, c: m.c, from: m.from, to: m.to }));
+  if (!changes.length) { toast('Keine Änderungen.', 'warn'); return; }
+  pushHistory({ label:`${changes.length} × Ersetzen`, type:'editCells', changes });
+  for (const ch of changes) appState.rows[ch.r][ch.c] = ch.to;
+  rebuildVisible(); renderAll();
+  toast(`${changes.length.toLocaleString('de-DE')} Zellen ersetzt.`, 'success');
+  updateSRPreview();
+}
+
+/* =============================================================
+   OPTIONS MENU
+   ============================================================= */
+function showOptsMenu() {
+  const host = document.getElementById('opts-menu-host'); host.innerHTML = '';
+  const btn = document.getElementById('btn-opts'); const r = btn.getBoundingClientRect();
+  const menu = document.createElement('div'); menu.className = 'menu-pop';
+  menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 4) + 'px';
+  menu.innerHTML = `
+    <div class="subhead">Parser</div>
+    <label class="it"><input type="radio" name="del" value="auto" ${appState.parserOpts.delimiter==='auto'?'checked':''}/> Auto-Erkennung</label>
+    <label class="it"><input type="radio" name="del" value="," ${appState.parserOpts.delimiter===','?'checked':''}/> Komma</label>
+    <label class="it"><input type="radio" name="del" value=";" ${appState.parserOpts.delimiter===';'?'checked':''}/> Semikolon</label>
+    <label class="it"><input type="radio" name="del" value="TAB" ${appState.parserOpts.delimiter==='TAB'?'checked':''}/> Tabulator</label>
+    <label class="it"><input type="radio" name="del" value="|" ${appState.parserOpts.delimiter==='|'?'checked':''}/> Pipe</label>
+    <div class="divider"></div>
+    <label class="it"><input type="radio" name="hdr" value="yes" ${appState.parserOpts.header==='yes'?'checked':''}/> Erste Zeile = Kopfzeile</label>
+    <label class="it"><input type="radio" name="hdr" value="no" ${appState.parserOpts.header==='no'?'checked':''}/> Erste Zeile = Daten</label>
+    <div class="divider"></div>
+    <div class="it" id="opts-show-all" ${appState.cols.some(c=>c.hidden)?'':'style="opacity:.5;pointer-events:none"'}>Alle Spalten einblenden</div>
+    <div class="it" id="opts-unpin" ${appState.cols.some(c=>c.pinned)?'':'style="opacity:.5;pointer-events:none"'}>Alle Fixierungen aufheben</div>
+    <div class="it" id="opts-redetect" ${appState.headers.length?'':'style="opacity:.5;pointer-events:none"'}>Spaltentypen neu erkennen</div>
+    <div class="it danger" id="opts-clear-filters" ${hasAnyColFilter()?'':'style="opacity:.5;pointer-events:none"'}>Alle Filter zurücksetzen</div>
+  `;
+  host.appendChild(menu);
+  menu.querySelectorAll('input[name="del"]').forEach(el => el.addEventListener('change', () => { appState.parserOpts.delimiter = el.value; if (appState.fileName) toast('Trennzeichen wirkt beim nächsten Öffnen.'); }));
+  menu.querySelectorAll('input[name="hdr"]').forEach(el => el.addEventListener('change', () => { appState.parserOpts.header = el.value; if (appState.fileName) toast('Kopfzeilen-Option wirkt beim nächsten Öffnen.'); }));
+  menu.querySelector('#opts-show-all').addEventListener('click', () => { showAllColumns(); host.innerHTML=''; });
+  menu.querySelector('#opts-unpin').addEventListener('click', () => { const targets = []; appState.cols.forEach((c,i) => { if (c.pinned) targets.push(i); }); for (const i of targets) pushHistory({ label:'Fixierungen aufheben', type:'colMeta', c:i, key:'pinned', from:true, to:false }); for (const i of targets) appState.cols[i].pinned = false; renderAll(); host.innerHTML=''; });
+  menu.querySelector('#opts-redetect').addEventListener('click', () => {
+    // Reset manual types to 'auto' and rerun detection
+    const targets = appState.cols.map((c,i) => ({i, c})).filter(x => x.c.type && x.c.type !== 'auto');
+    for (const t of targets) { pushHistory({ label:'Typ auf Auto', type:'colMeta', c:t.i, key:'type', from:t.c.type, to:'auto' }); appState.cols[t.i].type = 'auto'; }
+    ColumnTypes.detectAll(); renderAll(); host.innerHTML=''; toast('Spaltentypen neu erkannt.');
+  });
+  menu.querySelector('#opts-clear-filters').addEventListener('click', () => { clearAllFilters(); host.innerHTML=''; });
+  setTimeout(() => document.addEventListener('mousedown', onDocOpts), 0);
+}
+function onDocOpts(e) { if (!e.target.closest('.menu-pop') && e.target.id !== 'btn-opts' && !e.target.closest('#btn-opts')) { document.getElementById('opts-menu-host').innerHTML = ''; document.removeEventListener('mousedown', onDocOpts); } }
+
+/* =============================================================
+   HELPERS
+   ============================================================= */
+function escapeHTML(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function formatBytes(b) { if (!b) return '–'; if (b < 1024) return b+' B'; if (b < 1048576) return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(2)+' MB'; }
+function formatNum(n) { return n.toLocaleString('de-DE', { maximumFractionDigits: 4 }); }
+function delimLabel(d) { return d===','?'Komma':d===';'?'Semikolon':d==='\t'?'Tab':d==='|'?'Pipe':`"${d}"`; }
+function toast(msg, type='') { const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast show ' + type; clearTimeout(t._timer); t._timer = setTimeout(() => { t.className = 'toast ' + type; }, 2400); }
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon = document.getElementById('theme-ico');
+  if (theme === 'dark') icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  else icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  try { localStorage.setItem('csvtool-theme', theme); } catch(e){}
+}
+
+/* =============================================================
+   GLOBAL EVENTS
+   ============================================================= */
+window.addEventListener('mousemove', e => {
+  if (resizeOp) {
+    const dx = e.clientX - resizeOp.startX; const w = Math.max(40, resizeOp.startW + dx);
+    appState.cols[resizeOp.ci].width = w;
+    setSizerHeight(); renderHeader(); scheduleRender();
+  }
+});
+window.addEventListener('mouseup', () => {
+  if (resizeOp) {
+    document.querySelectorAll('.resz.active').forEach(el => el.classList.remove('active'));
+    document.body.style.cursor = '';
+    const { ci, originalW } = resizeOp;
+    if (originalW !== appState.cols[ci].width) { pushHistory({ label:'Spaltenbreite', type:'colMeta', c:ci, key:'width', from:originalW, to:appState.cols[ci].width }); updateUndoUI(); }
+    resizeOp = null; renderAll();
+  }
+  if (dragSelect) dragSelect = null;
+  if (autoFillOp) commitAutoFill();
+});
+document.addEventListener('DOMContentLoaded', () => { document.getElementById('grid-scroller').addEventListener('scroll', () => scheduleRender(), { passive: true }); });
+
+window.addEventListener('keydown', e => {
+  const tgt = e.target;
+  const inField = tgt.matches('input, select, textarea, [contenteditable="true"]');
+  if (inField) {
+    if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase() === 'f' && tgt.id !== 'search-input') { e.preventDefault(); document.getElementById('search-input').focus(); document.getElementById('search-input').select(); }
+    if (tgt.id === 'search-input') { if (e.key === 'Enter') { e.preventDefault(); jumpToHit(e.shiftKey ? -1 : 1); } else if (e.key === 'Escape') tgt.blur(); }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); document.getElementById('file-input').click(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (!document.getElementById('btn-export').disabled) exportCSV(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'm') { e.preventDefault(); if (appState.headers.length) copyMarkdown(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'j') { e.preventDefault(); if (appState.headers.length) copyJira(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); document.getElementById('search-input').focus(); document.getElementById('search-input').select(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') { e.preventDefault(); if (appState.headers.length) openSRModal(); return; }
+  if (e.key === '?' || (e.shiftKey && e.key === '?')) { e.preventDefault(); document.getElementById('help-modal').classList.add('show'); return; }
+  if (e.key === 'Escape') { hideFilterPopup(); hideContextMenu(); document.getElementById('help-modal').classList.remove('show'); }
+  if (!appState.selection) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); doCopy(false); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') { e.preventDefault(); doCopy(true); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteFromSys(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    const first = appState.visibleIndices[0] ?? 0; const last = appState.visibleIndices[appState.visibleIndices.length-1] ?? 0;
+    setSelection('cells', first, 0, last, appState.headers.length-1, first, 0); updateSelectionDOM();
+  }
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); clearSelectionValues(); }
+  else if (e.key === 'F2' || e.key === 'Enter') { e.preventDefault(); beginEditCell(appState.active.r, appState.active.c); }
+  else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const r0 = appState.visibleIndices[0] ?? 0; const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden); selectCell(r0, visC[0]); scrollIntoView(r0, visC[0]); }
+  else if (e.key === 'End' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const rE = appState.visibleIndices[appState.visibleIndices.length-1] ?? 0; const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden); selectCell(rE, visC[visC.length-1]); scrollIntoView(rE, visC[visC.length-1]); }
+  else if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); const dir = e.key === 'PageDown' ? 1 : -1; const pageRows = Math.max(1, Math.floor((document.getElementById('grid-scroller').clientHeight - 34) / ROW_H) - 1); moveActive(dir * pageRows, 0, e.shiftKey); }
+  else if (e.key.startsWith('Arrow')) { e.preventDefault(); const map = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] }; moveActive(...map[e.key], e.shiftKey); }
+  else if (e.key === 'Tab') { e.preventDefault(); moveActive(0, e.shiftKey ? -1 : 1); }
+  else if (e.key === 'Home') { e.preventDefault(); moveActive(0, -9999, e.shiftKey); }
+  else if (e.key === 'End') { e.preventDefault(); moveActive(0, 9999, e.shiftKey); }
+  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    beginEditCell(appState.active.r, appState.active.c);
+    requestAnimationFrame(() => { const ed = document.querySelector('.gcell.editing .editor'); if (ed) { ed.value = e.key; ed.setSelectionRange(1,1); } });
+  }
+});
+
+/* =============================================================
+   WIRING
+   ============================================================= */
+document.getElementById('btn-open').addEventListener('click', () => document.getElementById('file-input').click());
+document.getElementById('dropzone-btn').addEventListener('click', () => document.getElementById('file-input').click());
+document.getElementById('file-input').addEventListener('change', e => { const f = e.target.files[0]; if (f) loadFile(f); e.target.value=''; });
+document.getElementById('btn-new').addEventListener('click', newEmpty);
+document.getElementById('btn-export').addEventListener('click', e => { e.stopPropagation(); showExportMenu(); });
+document.getElementById('btn-undo').addEventListener('click', undo);
+document.getElementById('btn-redo').addEventListener('click', redo);
+document.getElementById('btn-copy').addEventListener('click', () => doCopy(false));
+document.getElementById('btn-cut').addEventListener('click', () => doCopy(true));
+document.getElementById('btn-paste').addEventListener('click', pasteFromSys);
+document.getElementById('btn-add-row').addEventListener('click', addRow);
+document.getElementById('btn-add-col').addEventListener('click', addColumn);
+document.getElementById('btn-opts').addEventListener('click', e => { e.stopPropagation(); showOptsMenu(); });
+document.getElementById('btn-view').addEventListener('click', e => { e.stopPropagation(); showViewMenu(); });
+document.getElementById('btn-replace').addEventListener('click', openSRModal);
+document.getElementById('sr-close').addEventListener('click', closeSRModal);
+document.getElementById('sr-replace-all').addEventListener('click', srReplaceAll);
+document.getElementById('sr-modal').addEventListener('click', e => { if (e.target.id === 'sr-modal') closeSRModal(); });
+['sr-find','sr-repl','sr-case','sr-whole','sr-regex','sr-selonly','sr-cols'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', updateSRPreview);
+  el.addEventListener('change', updateSRPreview);
+});
+document.getElementById('sr-find').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); srReplaceAll(); } if (e.key === 'Escape') closeSRModal(); });
+document.getElementById('sr-repl').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); srReplaceAll(); } if (e.key === 'Escape') closeSRModal(); });
+document.getElementById('btn-clear-filters').addEventListener('click', clearAllFilters);
+document.getElementById('btn-help').addEventListener('click', () => document.getElementById('help-modal').classList.add('show'));
+document.getElementById('help-close').addEventListener('click', () => document.getElementById('help-modal').classList.remove('show'));
+document.getElementById('help-modal').addEventListener('click', e => { if (e.target.id === 'help-modal') e.currentTarget.classList.remove('show'); });
+document.getElementById('btn-theme').addEventListener('click', () => { const cur = document.documentElement.getAttribute('data-theme') || 'light'; applyTheme(cur === 'dark' ? 'light' : 'dark'); });
+document.getElementById('stat-filters').addEventListener('click', clearAllFilters);
+
+let searchTimer;
+document.getElementById('search-input').addEventListener('input', e => { clearTimeout(searchTimer); searchTimer = setTimeout(() => performSearch(e.target.value), 150); });
+document.getElementById('search-prev').addEventListener('click', () => jumpToHit(-1));
+document.getElementById('search-next').addEventListener('click', () => jumpToHit(1));
+
+const dz = document.getElementById('dropzone');
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover'); }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover'); }));
+dz.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { if (rowDragOp || colDragOp) return; e.preventDefault(); if (document.getElementById('empty-state').style.display === 'none') return; const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+window.addEventListener('resize', () => scheduleRender());
+
+(function init() {
+  let theme = 'light';
+  try { theme = localStorage.getItem('csvtool-theme') || 'light'; } catch(e){}
+  applyTheme(theme);
+  applyRowHeight(ROW_H_DEFAULT);
+})();
+</script>
+</body>
+</html>
