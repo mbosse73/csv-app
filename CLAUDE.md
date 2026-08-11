@@ -62,8 +62,11 @@ const cols = selectedVisibleCols(sel);   // lässt hidden-Spalten weg
 ```
 
 Niemals `for (let r = sel.r1; r <= sel.r2; r++)` oder `for (let c = sel.c1; c <= sel.c2; c++)`.
-Das ist der Fehler, den dieses Projekt schon fünfmal hatte — zuletzt in `commitAutoFill`
-und `deleteSelectedCols`, wo er ausgeblendete **Spalten** traf statt ausgefilterter Zeilen.
+Das ist der Fehler, den dieses Projekt schon sechsmal hatte — zuletzt in `deleteSelectedCols`
+(traf ausgeblendete **Spalten**) und in `commitAutoFill` (rechnete bei aktiver Sortierung in
+Roh-Indizes statt in **Anzeigereihenfolge** und überschrieb Zeilen außerhalb des Zugbereichs).
+Wo die Anzeige*reihenfolge* zählt und nicht nur die Zugehörigkeit, ist `viewRows` die
+Bezugsgröße — siehe `autoFillRanges()`.
 
 ### Zustandsänderungen laufen über die History
 
@@ -109,12 +112,12 @@ Es gibt kein Testframework. Geprüft wird, indem ein echter Browser die App fern
 legt ihren Zustand und ihre Funktionen global ab, deshalb genügt `page.evaluate()`.
 
 ```bash
-npm test                  # 25 Prüfungen, alle müssen OK sein
+npm test                  # 26 Prüfungen, alle müssen OK sein
 npm run shot              # Screenshot nach tools/out/app.png
 node tools/screenshot.mjs --theme dark --rows 5000 --frozen 20 --rowh 20 --scroll 20000
 ```
 
-**Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Die Suite deckt die 17 behobenen
+**Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Die Suite deckt die 18 behobenen
 Befunde plus Gegenproben ab (XLSX, Undo, `batch`-Undo, XSS-Escaping, AutoFill, Zelleditor,
 Listener-Anhäufung, Suche, Neu-Einlesen, Zahlenparser). Ein `FAIL` heißt: ein behobener Befund
 ist zurück. Neue Funktionen brauchen dort eine neue Prüfung.
@@ -129,7 +132,7 @@ Binary unter `/opt/pw-browsers/chromium` aus — Tests laufen also auch nach ein
 
 ## Befunde und nächste Schritte
 
-`ANALYSE.md` ist das Befundprotokoll: 17 Befunde mit Fundstelle, Messwert, Lösungsansatz und
+`ANALYSE.md` ist das Befundprotokoll: 18 Befunde mit Fundstelle, Messwert, Lösungsansatz und
 umgesetzter Lösung. **Alle sind behoben** (V0.6.1) — das Dokument bleibt als Begründung dafür
 erhalten, warum bestimmte Stellen so aussehen, wie sie aussehen. Abschnitt 4 listet die noch
 offenen Weiterentwicklungsvorschläge, die lohnendsten zuerst:

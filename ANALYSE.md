@@ -8,8 +8,8 @@ gelesen. Der Reproduktions-Harness liegt unter `tools/befunde-repro.mjs`.
 > **Alle Befunde sind behoben** (V0.6.1). Dieses Dokument bleibt als Befundprotokoll
 > erhalten: es hält fest, was gemessen wurde und warum die jeweilige Lösung gewählt wurde.
 > Jeder Befund trägt am Ende eine Zeile **Behoben** mit der umgesetzten Lösung.
-> Befunde 15–17 kamen bei der Nachprüfung dazu und standen nicht in der ursprünglichen Analyse.
-> `npm test` prüft alle Befunde plus Gegenproben — Stand: **25 bestanden, 0 auffällig**.
+> Befunde 15–18 kamen bei der Nachprüfung dazu und standen nicht in der ursprünglichen Analyse.
+> `npm test` prüft alle Befunde plus Gegenproben — Stand: **26 bestanden, 0 auffällig**.
 
 ---
 
@@ -377,6 +377,33 @@ Spalte zählt jetzt die *sichtbaren* Spalten („Letzte sichtbare Spalte nicht l
 
 ---
 
+### 18 · KRITISCH — AutoFill füllt bei aktiver Sortierung die falschen Zeilen
+`commitAutoFill`, bei der Nachprüfung gefunden
+
+Quelle und Ziel wurden über Roh-Indizes bestimmt (`visR.filter(r => r > startSel.r2 && r <= currentR)`).
+Sobald sortiert ist, stimmt „unterhalb" im Roh-Index nicht mehr mit „unterhalb" auf dem
+Bildschirm überein. Je nach Sortierung passiert daher **gar nichts** oder es werden **mehr
+Zeilen überschrieben, als gezogen wurden**:
+
+```
+Daten Prio/Wert: 1/A 5/B 2/C 4/D 3/E, aufsteigend nach Prio sortiert
+Anzeige:            A C E D B      (Roh-Indizes 0,2,4,3,1)
+Gezogen:            1. bis 3. angezeigte Zeile
+Erwartet:           A A A D B
+Tatsächlich:        A A A A A      ← D und B mitgefüllt, ohne dass darüber gezogen wurde
+
+Absteigend sortiert: AutoFill tat gar nichts.
+```
+
+Das ist stiller Datenverlust: Zeilen außerhalb des gezogenen Bereichs werden überschrieben,
+und der Nutzer hat keinen Anlass, Undo zu drücken.
+
+**Behoben:** `autoFillRanges()` bestimmt Quell- und Zielzeilen über die Positionen im
+Render-Plan, also in Anzeigereihenfolge. Damit fallen Gruppenköpfe und eingeklappte Gruppen
+automatisch heraus. Die Vorschau benutzt dieselbe Liste.
+
+---
+
 ## 4. Vorschläge für die Weiterentwicklung
 
 Die Roadmap der Spezifikation ist gut gefüllt. Die folgenden Punkte standen bewusst davor, weil
@@ -424,6 +451,6 @@ npm test                        # = node tools/befunde-repro.mjs
 Das Skript startet Chromium, lädt `index.html` per `file://`, ruft die globalen Funktionen der App
 direkt auf und prüft jeden Befund einzeln. Ausgabe: eine Zeile pro Befund mit Messwerten.
 
-Erwartung: **25 bestanden, 0 auffällig.** Ein `FAIL` bedeutet, dass ein behobener Befund wieder
+Erwartung: **26 bestanden, 0 auffällig.** Ein `FAIL` bedeutet, dass ein behobener Befund wieder
 eingebaut wurde. Die Messwerte in diesem Dokument stammen aus diesem Skript; wer sie zitiert,
 sollte sie vorher neu erheben — sie schwanken je nach Maschine um etwa ±50 %.

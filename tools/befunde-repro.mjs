@@ -265,6 +265,19 @@ const { page, fehler: jsErrors, close } = await openApp();
   });
   check('––', 'Zellinhalte werden HTML-escaped', xss, 'kein XSS über Zellwerte');
 
+  const fillSortiert = await page.evaluate(() => {
+    loadCSVText('Prio,Wert\n1,A\n5,B\n2,C\n4,D\n3,E', 'fs.csv', 0);
+    appState.sort = { col: 0, dir: 1 };          // Anzeige: A C E D B (roh 0,2,4,3,1)
+    rebuildVisible();
+    const vis = appState.visibleIndices;
+    setSelection('cells', vis[0], 1, vis[0], 1, vis[0], 1);
+    autoFillOp = { startSel: normalizedSel(), currentR: vis[2] };  // über 3 Zeilen ziehen
+    commitAutoFill();
+    return appState.visibleIndices.map(i => appState.rows[i][1]).join(' ');
+  });
+  check('––', 'AutoFill füllt bei Sortierung genau die gezogenen Zeilen', fillSortiert === 'A A A D B',
+    `Anzeige nachher: ${fillSortiert} (erwartet: A A A D B)`);
+
   /* Befund 16/17: dieselbe Fehlerklasse wie 01, nur für Spalten statt Zeilen. */
   const fillVersteckt = await page.evaluate(() => {
     loadCSVText('A,Versteckt,C\n1,schutz1,x\n2,schutz2,y\n,schutz3,\n,schutz4,', 'hf.csv', 0);

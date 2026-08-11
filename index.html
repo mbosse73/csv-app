@@ -1648,13 +1648,36 @@ function autoFitColumn(ci) {
    AUTOFILL
    ============================================================= */
 function startAutoFill(e) { e.preventDefault(); e.stopPropagation(); const sel = normalizedSel(); if (!sel) return; autoFillOp = { startSel: {...sel}, currentR: sel.r2 }; document.body.style.cursor = 'crosshair'; }
+
+/**
+ * Quell- und Zielzeilen des AutoFill — in **Anzeigereihenfolge**, nicht nach Roh-Index.
+ *
+ * Der Nutzer zieht über das, was er sieht. `r1..r2` sind aber Roh-Indizes: sobald sortiert
+ * ist, stimmt „unterhalb" im Roh-Index nicht mehr mit „unterhalb" auf dem Bildschirm
+ * überein. Über die Positionen im Render-Plan gerechnet stimmt beides wieder, und
+ * Gruppenköpfe sowie eingeklappte Gruppen fallen automatisch heraus.
+ */
+function autoFillRanges(startSel, currentR) {
+  const vr = appState.viewRows;
+  const a = findViewRowByData(startSel.r1), b = findViewRowByData(startSel.r2), cur = findViewRowByData(currentR);
+  if (a < 0 || b < 0 || cur < 0) return null;
+  const oben = Math.min(a, b), unten = Math.max(a, b);
+  if (cur <= unten) return null;
+  const sammle = (von, bis) => { const out = []; for (let k = von; k <= bis; k++) if (vr[k].kind === 'data') out.push(vr[k].rIdx); return out; };
+  const src = sammle(oben, unten), tgt = sammle(unten + 1, cur);
+  return (src.length && tgt.length) ? { src, tgt } : null;
+}
+
 function showAutoFillPreview() {
   document.querySelectorAll('.fill-preview').forEach(el => el.classList.remove('fill-preview'));
   if (!autoFillOp) return;
-  const { startSel, currentR } = autoFillOp; if (currentR <= startSel.r2) return;
-  // Dieselben Spalten wie commitAutoFill, damit die Vorschau nicht mehr verspricht, als sie hält.
+  const { startSel, currentR } = autoFillOp;
+  // Dieselben Zeilen und Spalten wie commitAutoFill, damit die Vorschau nicht mehr
+  // verspricht, als sie hält.
+  const bereich = autoFillRanges(startSel, currentR);
+  if (!bereich) return;
   const cols = selectedVisibleCols(startSel);
-  for (const r of selectedVisibleRows({ r1: startSel.r2 + 1, r2: currentR })) {
+  for (const r of bereich.tgt) {
     for (const c of cols) { const td = document.querySelector(`.gcell[data-r="${r}"][data-c="${c}"]`); if (td) td.classList.add('fill-preview'); }
   }
 }
@@ -1663,13 +1686,12 @@ function commitAutoFill() {
   if (!autoFillOp) { document.body.style.cursor=''; return; }
   const { startSel, currentR } = autoFillOp;
   const fillCols = selectedVisibleCols(startSel);
-  if (currentR > startSel.r2 && fillCols.length) {
-    const visR = appState.visibleIndices;
-    const srcIdx = visR.filter(r => r>=startSel.r1 && r<=startSel.r2);
+  const bereich = autoFillRanges(startSel, currentR);
+  if (bereich && fillCols.length) {
     // Nur eingeblendete Spalten füllen; eine ausgeblendete Spalte mitten im Bereich
     // würde sonst unbemerkt überschrieben.
-    const srcRows = srcIdx.map(r => fillCols.map(c => appState.rows[r][c] ?? ''));
-    const tgtIdx = visR.filter(r => r>startSel.r2 && r<=currentR);
+    const srcRows = bereich.src.map(r => fillCols.map(c => appState.rows[r][c] ?? ''));
+    const tgtIdx = bereich.tgt;
     const changes = [];
     for (let i=0; i<tgtIdx.length; i++) {
       const tgtR = tgtIdx[i];
@@ -1698,7 +1720,10 @@ function commitAutoFill() {
       }
     }
     if (changes.length) { pushHistory({ label:'AutoFill', type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ch.to; }
-    setSelection('cells', startSel.r1, startSel.c1, currentR, startSel.c2, startSel.r1, startSel.c1);
+    // Auswahlrechteck über alle betroffenen Roh-Indizes aufspannen (bei Sortierung ist
+    // das nur eine Näherung — die Auswahl bleibt konstruktionsbedingt ein Rechteck).
+    const betroffen = bereich.src.concat(bereich.tgt);
+    setSelection('cells', Math.min(...betroffen), startSel.c1, Math.max(...betroffen), startSel.c2, startSel.r1, startSel.c1);
     rebuildVisible(); renderAll();
   }
   autoFillOp = null; document.body.style.cursor = '';

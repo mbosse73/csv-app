@@ -66,7 +66,7 @@ Browserbasierter CSV-Betrachter und -Editor für mittlere bis sehr große Dateie
 
 ### V0.6.1 — Fehlerbehebungen (NEU)
 
-Behebt die 17 Befunde aus `ANALYSE.md`. Verhaltensrelevant sind:
+Behebt die 18 Befunde aus `ANALYSE.md`. Verhaltensrelevant sind:
 
 | Bereich | Vorher | Jetzt |
 |---|---|---|
@@ -79,6 +79,7 @@ Behebt die 17 Befunde aus `ANALYSE.md`. Verhaltensrelevant sind:
 | „Ganze Zelle" + Regex | Anker wurden ignoriert | Muster wird als `^(?:…)$` verankert |
 | JSON-Export | doppelte Spaltennamen überschrieben sich | eindeutige Namen (`A`, `A_2`) plus Hinweis-Toast |
 | `parseNumber('1.234.567')` | `1.234` | `1234567` (einzelnes `1.234` bleibt bewusst mehrdeutig) |
+| AutoFill bei Sortierung | rechnete in Roh-Indizes: füllte zu viele Zeilen oder gar keine | rechnet in Anzeigereihenfolge über `viewRows` (`autoFillRanges()`) |
 
 Nicht verhaltensrelevant, aber spürbar: Tastaturnavigation ist über eine Index-Karte O(1)
 statt O(n), Wertefilter nutzen ein `Set` statt `Array.includes`, und Zell-Ereignisse laufen
