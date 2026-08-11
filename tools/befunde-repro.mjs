@@ -265,6 +265,29 @@ const { page, fehler: jsErrors, close } = await openApp();
   });
   check('––', 'Zellinhalte werden HTML-escaped', xss, 'kein XSS über Zellwerte');
 
+  /* Befund 16/17: dieselbe Fehlerklasse wie 01, nur für Spalten statt Zeilen. */
+  const fillVersteckt = await page.evaluate(() => {
+    loadCSVText('A,Versteckt,C\n1,schutz1,x\n2,schutz2,y\n,schutz3,\n,schutz4,', 'hf.csv', 0);
+    appState.cols[1].hidden = true; renderAll();
+    setSelection('cells', 0, 0, 1, 2, 0, 0);       // Auswahl spannt über die versteckte Spalte
+    autoFillOp = { startSel: normalizedSel(), currentR: 3 };
+    commitAutoFill();
+    return { versteckt: appState.rows.map(r => r[1]).join(','), sichtbar: appState.rows.map(r => r[0]).join(',') };
+  });
+  check('––', 'AutoFill überschreibt keine ausgeblendeten Spalten',
+    fillVersteckt.versteckt === 'schutz1,schutz2,schutz3,schutz4',
+    `versteckte Spalte: ${fillVersteckt.versteckt} · gefüllte Spalte: ${fillVersteckt.sichtbar}`);
+
+  const delVersteckt = await page.evaluate(() => {
+    loadCSVText('A,Versteckt,C,D\n1,schutz,x,9', 'hd.csv', 0);
+    appState.cols[1].hidden = true; renderAll();
+    setSelection('cols', 0, 0, 0, 2, 0, 0);        // Nutzer sieht und wählt A und C
+    deleteSelectedCols();
+    return appState.headers.join(',');
+  });
+  check('––', 'Spalten löschen verschont ausgeblendete Spalten', delVersteckt === 'Versteckt,D',
+    `Kopfzeilen nachher: ${delVersteckt}`);
+
   const batchUndo = await page.evaluate(() => {
     loadCSVText('A,B,C\n1,2,3', 'b.csv', 0);
     appState.cols[1].hidden = true; appState.cols[2].hidden = true;

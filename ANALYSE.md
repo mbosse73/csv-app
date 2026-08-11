@@ -5,10 +5,11 @@
 Befunde 01–13 wurden im Browser (Chromium via Playwright) reproduziert, Befund 14 aus dem Code
 gelesen. Der Reproduktions-Harness liegt unter `tools/befunde-repro.mjs`.
 
-> **Alle 14 Befunde sind behoben** (V0.6.1). Dieses Dokument bleibt als Befundprotokoll
+> **Alle Befunde sind behoben** (V0.6.1). Dieses Dokument bleibt als Befundprotokoll
 > erhalten: es hält fest, was gemessen wurde und warum die jeweilige Lösung gewählt wurde.
 > Jeder Befund trägt am Ende eine Zeile **Behoben** mit der umgesetzten Lösung.
-> `npm test` prüft alle Befunde plus Gegenproben — Stand: **23 bestanden, 0 auffällig**.
+> Befunde 15–17 kamen bei der Nachprüfung dazu und standen nicht in der ursprünglichen Analyse.
+> `npm test` prüft alle Befunde plus Gegenproben — Stand: **25 bestanden, 0 auffällig**.
 
 ---
 
@@ -342,6 +343,40 @@ er im DOM ist, und heilt ein verwaistes Flag selbst. Beim Scrollen wird die Bear
 
 ---
 
+### 16 · HOCH — AutoFill überschreibt ausgeblendete Spalten
+`commitAutoFill`, bei der Nachprüfung gefunden
+
+Spiegelbild von Befund 01, nur für Spalten: Die Quell- und Zielspalten wurden mit
+`for (let c = startSel.c1; c <= startSel.c2; c++)` durchlaufen. Liegt eine ausgeblendete
+Spalte im Bereich, füllt AutoFill sie mit — unsichtbar für den Nutzer.
+
+```
+Spalten A | Versteckt | C, Auswahl A..C, AutoFill nach unten
+Versteckt vorher:  schutz1, schutz2, schutz3, schutz4
+Versteckt nachher: schutz1, schutz2, schutz1, schutz2   ← überschrieben
+```
+
+**Behoben:** `selectedVisibleCols()` bestimmt die zu füllenden Spalten; die Vorschau
+(`showAutoFillPreview`) benutzt dieselbe Liste, damit sie nicht mehr verspricht als sie hält.
+
+---
+
+### 17 · HOCH — „Spalte(n) löschen" löscht ausgeblendete Spalten mit
+`deleteSelectedCols`, bei der Nachprüfung gefunden
+
+Gleiche Ursache. Wer zwei nebeneinander *dargestellte* Spalten wählt, zwischen denen eine
+ausgeblendete liegt, verliert diese beim Löschen — ohne Hinweis.
+
+```
+Spalten A | Versteckt | C | D, gewählt A..C
+Kopfzeilen nachher: D          ← „Versteckt" ist weg
+```
+
+**Behoben:** Auch hier `selectedVisibleCols()`. Die Sperre gegen das Löschen der letzten
+Spalte zählt jetzt die *sichtbaren* Spalten („Letzte sichtbare Spalte nicht löschbar.").
+
+---
+
 ## 4. Vorschläge für die Weiterentwicklung
 
 Die Roadmap der Spezifikation ist gut gefüllt. Die folgenden Punkte standen bewusst davor, weil
@@ -389,6 +424,6 @@ npm test                        # = node tools/befunde-repro.mjs
 Das Skript startet Chromium, lädt `index.html` per `file://`, ruft die globalen Funktionen der App
 direkt auf und prüft jeden Befund einzeln. Ausgabe: eine Zeile pro Befund mit Messwerten.
 
-Erwartung: **23 bestanden, 0 auffällig.** Ein `FAIL` bedeutet, dass ein behobener Befund wieder
+Erwartung: **25 bestanden, 0 auffällig.** Ein `FAIL` bedeutet, dass ein behobener Befund wieder
 eingebaut wurde. Die Messwerte in diesem Dokument stammen aus diesem Skript; wer sie zitiert,
 sollte sie vorher neu erheben — sie schwanken je nach Maschine um etwa ±50 %.

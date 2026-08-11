@@ -70,7 +70,7 @@ Behebt die 14 Befunde aus `ANALYSE.md`. Verhaltensrelevant sind:
 
 | Bereich | Vorher | Jetzt |
 |---|---|---|
-| `Entf`, Live-Summe, `Strg+A` | wirkten auf den Roh-Indexbereich `r1..r2` | wirken nur auf sichtbare Zeilen und eingeblendete Spalten (`selectedVisibleRows()` / `selectedVisibleCols()`) |
+| `Entf`, Live-Summe, `Strg+A`, AutoFill, Spalten löschen | wirkten auf den Roh-Indexbereich `r1..r2` bzw. `c1..c2` | wirken nur auf sichtbare Zeilen und eingeblendete Spalten (`selectedVisibleRows()` / `selectedVisibleCols()`) |
 | Zahlenanzeige | `1299.90` → `1.299,9` | `1.299,90` — Nachkommastellen je Spalte (`cols[].decimals`) |
 | Suchfeld | filterte die Tabelle | **markiert** Treffer; Ausblenden über den Schalter „Nur Treffer" |
 | Trennzeichen / Kopfzeile | „wirkt beim nächsten Öffnen" | liest die Datei sofort neu ein (`reparse()`, Rohtext wird gehalten) |
@@ -129,8 +129,9 @@ Auswertung hält `excludedSet()` pro Filterobjekt ein `Set` in einer `WeakMap` v
 Filterobjekte werden nie mutiert, sondern ersetzt.
 
 **Auswahl:** `selection` ist ein Rechteck über *Roh-Indizes*. Jede auswertende Stelle muss
-`selectedVisibleRows()` bzw. `selectedVisibleCols()` benutzen — direkt über `r1..r2` zu
-iterieren greift auf ausgefilterte Zeilen zu, die der Nutzer nicht sieht.
+`selectedVisibleRows()` bzw. `selectedVisibleCols()` benutzen — direkt über `r1..r2` oder
+`c1..c2` zu iterieren greift auf ausgefilterte Zeilen und ausgeblendete Spalten zu, die der
+Nutzer nicht sieht.
 
 **Befehlstypen der Historie:** `batch`, `editCells`, `addRows`, `delRows`, `moveRow`,
 `addCol`, `delCols`, `moveCol`, `renameHeader`, `colMeta`, `colFilter`. `batch` bündelt

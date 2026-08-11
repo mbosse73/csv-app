@@ -52,7 +52,8 @@ Aufgebaut wird die Kette von `rebuildVisible()` → `buildViewRows()`. Nach **je
 > **Auswahlbereiche sind Rechtecke über Roh-Indizes (`r1..r2`), nicht Mengen sichtbarer Zeilen.**
 
 Wer die Auswahl auswertet, **muss** über die Hilfsfunktionen gehen — sonst werden ausgefilterte
-Zeilen oder ausgeblendete Spalten mitgelesen oder mitgeschrieben (→ Befunde 01–03 in `ANALYSE.md`):
+Zeilen oder ausgeblendete Spalten mitgelesen oder mitgeschrieben
+(→ Befunde 01–03, 16 und 17 in `ANALYSE.md`):
 
 ```js
 const sel  = normalizedSel();
@@ -60,8 +61,9 @@ const rows = selectedVisibleRows(sel);   // schneidet gegen visibleIndices
 const cols = selectedVisibleCols(sel);   // lässt hidden-Spalten weg
 ```
 
-Niemals `for (let r = sel.r1; r <= sel.r2; r++)`. Das ist der Fehler, den dieses Projekt
-schon dreimal hatte.
+Niemals `for (let r = sel.r1; r <= sel.r2; r++)` oder `for (let c = sel.c1; c <= sel.c2; c++)`.
+Das ist der Fehler, den dieses Projekt schon fünfmal hatte — zuletzt in `commitAutoFill`
+und `deleteSelectedCols`, wo er ausgeblendete **Spalten** traf statt ausgefilterter Zeilen.
 
 ### Zustandsänderungen laufen über die History
 
@@ -107,12 +109,12 @@ Es gibt kein Testframework. Geprüft wird, indem ein echter Browser die App fern
 legt ihren Zustand und ihre Funktionen global ab, deshalb genügt `page.evaluate()`.
 
 ```bash
-npm test                  # 23 Prüfungen, alle müssen OK sein
+npm test                  # 25 Prüfungen, alle müssen OK sein
 npm run shot              # Screenshot nach tools/out/app.png
 node tools/screenshot.mjs --theme dark --rows 5000 --frozen 20 --rowh 20 --scroll 20000
 ```
 
-**Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Die Suite deckt die 14 behobenen
+**Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Die Suite deckt die 17 behobenen
 Befunde plus Gegenproben ab (XLSX, Undo, `batch`-Undo, XSS-Escaping, AutoFill, Zelleditor,
 Listener-Anhäufung, Suche, Neu-Einlesen, Zahlenparser). Ein `FAIL` heißt: ein behobener Befund
 ist zurück. Neue Funktionen brauchen dort eine neue Prüfung.
@@ -127,7 +129,7 @@ Binary unter `/opt/pw-browsers/chromium` aus — Tests laufen also auch nach ein
 
 ## Befunde und nächste Schritte
 
-`ANALYSE.md` ist das Befundprotokoll: 15 Befunde mit Fundstelle, Messwert, Lösungsansatz und
+`ANALYSE.md` ist das Befundprotokoll: 17 Befunde mit Fundstelle, Messwert, Lösungsansatz und
 umgesetzter Lösung. **Alle sind behoben** (V0.6.1) — das Dokument bleibt als Begründung dafür
 erhalten, warum bestimmte Stellen so aussehen, wie sie aussehen. Abschnitt 4 listet die noch
 offenen Weiterentwicklungsvorschläge, die lohnendsten zuerst:

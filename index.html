@@ -1364,7 +1364,10 @@ function placeFillHandle() {
   document.querySelectorAll('.fill-handle').forEach(el => el.remove());
   if (!appState.selection || appState.selection.type !== 'cells') return;
   const sel = normalizedSel();
-  const td = document.querySelector(`#grid-rows .gcell[data-r="${sel.r2}"][data-c="${sel.c2}"]`);
+  // Unten rechts heißt: letzte *sichtbare* Zeile, letzte *eingeblendete* Spalte der Auswahl.
+  const rows = selectedVisibleRows(sel), cols = selectedVisibleCols(sel);
+  if (!rows.length || !cols.length) return;
+  const td = document.querySelector(`#grid-rows .gcell[data-r="${rows[rows.length-1]}"][data-c="${cols[cols.length-1]}"]`);
   if (!td) return; // Wenn Fill-Target in frozen ist, überspringen wir das Handle
   const h = document.createElement('div'); h.className = 'fill-handle'; h.title = 'AutoFill ziehen';
   const host = document.getElementById('grid-rows');
@@ -1577,7 +1580,7 @@ function insertRowAt(ri, pos) { const at = pos === 'before' ? ri : ri + 1; const
 function insertColAt(ci, pos) { const at = pos === 'before' ? ci : ci + 1; const name = `Spalte ${appState.headers.length+1}`; pushHistory({ label:'Spalte einfügen', type:'addCol', at, name, width: DEFAULT_COL_WIDTH }); applyForward({ type:'addCol', at, name, width: DEFAULT_COL_WIDTH }); rebuildVisible(); renderAll(); }
 function deleteSelectedRows() {
   const sel = normalizedSel(); if (!sel) return;
-  const rows = appState.visibleIndices.filter(r => r>=sel.r1 && r<=sel.r2);
+  const rows = selectedVisibleRows(sel);
   if (!rows.length) return;
   if (rows.length > 50 && !confirm(`${rows.length} Zeile(n) löschen?`)) return;
   const backup = rows.map(i => appState.rows[i].slice());
@@ -1587,9 +1590,12 @@ function deleteSelectedRows() {
 }
 function deleteSelectedCols() {
   const sel = normalizedSel(); if (!sel) return;
-  const cols = []; for (let c=sel.c1; c<=sel.c2; c++) cols.push(c);
+  // Ausgeblendete Spalten innerhalb des Bereichs bleiben stehen — der Nutzer sieht sie
+  // nicht und kann sie folglich auch nicht bewusst zum Löschen ausgewählt haben.
+  const cols = selectedVisibleCols(sel);
   if (!cols.length) return;
-  if (cols.length === appState.headers.length) { toast('Letzte Spalte nicht löschbar.', 'error'); return; }
+  const sichtbareSpalten = appState.cols.filter(c => !c.hidden).length;
+  if (cols.length === sichtbareSpalten) { toast('Letzte sichtbare Spalte nicht löschbar.', 'error'); return; }
   if (cols.length > 3 && !confirm(`${cols.length} Spalte(n) löschen?`)) return;
   const backup = cols.map(i => ({ header: appState.headers[i], col: { ...appState.cols[i] }, values: appState.rows.map(r => r[i]) }));
   pushHistory({ label:`${cols.length} Spalte(n) löschen`, type:'delCols', indices: cols.slice(), backup });
@@ -1646,22 +1652,29 @@ function showAutoFillPreview() {
   document.querySelectorAll('.fill-preview').forEach(el => el.classList.remove('fill-preview'));
   if (!autoFillOp) return;
   const { startSel, currentR } = autoFillOp; if (currentR <= startSel.r2) return;
-  for (let r = startSel.r2 + 1; r <= currentR; r++) for (let c = startSel.c1; c <= startSel.c2; c++) { const td = document.querySelector(`.gcell[data-r="${r}"][data-c="${c}"]`); if (td) td.classList.add('fill-preview'); }
+  // Dieselben Spalten wie commitAutoFill, damit die Vorschau nicht mehr verspricht, als sie hält.
+  const cols = selectedVisibleCols(startSel);
+  for (const r of selectedVisibleRows({ r1: startSel.r2 + 1, r2: currentR })) {
+    for (const c of cols) { const td = document.querySelector(`.gcell[data-r="${r}"][data-c="${c}"]`); if (td) td.classList.add('fill-preview'); }
+  }
 }
 function commitAutoFill() {
   document.querySelectorAll('.fill-preview').forEach(el => el.classList.remove('fill-preview'));
   if (!autoFillOp) { document.body.style.cursor=''; return; }
   const { startSel, currentR } = autoFillOp;
-  if (currentR > startSel.r2) {
-    const srcRows = []; const visR = appState.visibleIndices;
+  const fillCols = selectedVisibleCols(startSel);
+  if (currentR > startSel.r2 && fillCols.length) {
+    const visR = appState.visibleIndices;
     const srcIdx = visR.filter(r => r>=startSel.r1 && r<=startSel.r2);
-    for (const r of srcIdx) { const arr = []; for (let c=startSel.c1; c<=startSel.c2; c++) arr.push(appState.rows[r][c] ?? ''); srcRows.push(arr); }
+    // Nur eingeblendete Spalten füllen; eine ausgeblendete Spalte mitten im Bereich
+    // würde sonst unbemerkt überschrieben.
+    const srcRows = srcIdx.map(r => fillCols.map(c => appState.rows[r][c] ?? ''));
     const tgtIdx = visR.filter(r => r>startSel.r2 && r<=currentR);
     const changes = [];
     for (let i=0; i<tgtIdx.length; i++) {
       const tgtR = tgtIdx[i];
-      for (let cc=0; cc<srcRows[0].length; cc++) {
-        const c = startSel.c1 + cc;
+      for (let cc=0; cc<fillCols.length; cc++) {
+        const c = fillCols[cc];
         const colValues = srcRows.map(rw => rw[cc]);
         const allNums = colValues.every(v => v !== '' && !isNaN(ColumnTypes.parseNumber(v)));
         let newVal;
