@@ -10,7 +10,7 @@ gelesen. Der Reproduktions-Harness liegt unter `tools/befunde-repro.mjs`.
 > Jeder Befund trägt am Ende eine Zeile **Behoben** mit der umgesetzten Lösung.
 > Befunde 15–19 kamen bei der Nachprüfung dazu und standen nicht in der ursprünglichen Analyse.
 > Abschnitt 3a beschreibt den Umbau, der die Ursache hinter sechs von ihnen beseitigt.
-> `npm test` prüft alle Befunde plus Gegenproben — Stand: **32 bestanden, 0 auffällig**.
+> `npm test` prüft alle Befunde plus Gegenproben — Stand: **41 bestanden, 0 auffällig**.
 
 ---
 
@@ -481,18 +481,18 @@ das Laden einer neuen Datei hinweg — die App blieb dann mit leerem Raster steh
 
 Die Roadmap der Spezifikation ist gut gefüllt. Die folgenden Punkte standen bewusst davor, weil
 sie strukturelle Schwächen beheben, die sonst jede weitere Funktion mitschleppt. Die ersten
-sechs Zeilen sind mit V0.6.1 umgesetzt und hier als Beleg stehen geblieben.
+sechs Zeilen sind mit V0.6.1 umgesetzt, die drei folgenden mit V0.8; sie bleiben als Beleg stehen.
 
 | Priorität | Aufwand | Vorschlag |
 |---|---|---|
 | ✅ erledigt | klein | **Gemeinsame Funktion `selectedVisibleRows()`** — löst Befunde 01–03 in einem Zug und verhindert, dass der nächste Bearbeitungsbefehl den Fehler erbt. |
-| ✅ erledigt | klein | **Testgerüst im Browser.** Die globalen Funktionen machen die App hervorragend fernsteuerbar (siehe `tools/befunde-repro.mjs`, inzwischen 23 Prüfungen inkl. Gegenproben). |
+| ✅ erledigt | klein | **Testgerüst im Browser.** Die globalen Funktionen machen die App hervorragend fernsteuerbar (siehe `tools/befunde-repro.mjs`, inzwischen 41 Prüfungen inkl. Gegenproben). |
 | ✅ erledigt | mittel | **`batch`-Befehl in der History** — ein Undo-Schritt pro Nutzeraktion. Beseitigt Befund 10 und ist Voraussetzung für Duplikat-Entfernung, Spaltentransformationen und berechnete Spalten. |
 | ✅ erledigt | mittel | **Index-Karte in `buildViewRows()`** — macht Navigation, Scrollen und Trefferansprung O(1) (Befund 07). |
-| ✅ teilweise | mittel | **Format und Zahlenschema pro Spalte** — `cols[].decimals` behebt Befund 05. Ein frei wählbares Anzeigeformat je Spalte (Währung, Prozent, feste Stellen) fehlt weiterhin und bleibt die Grundlage für die geplante bedingte Formatierung. |
+| ✅ erledigt | mittel | **Format und Zahlenschema pro Spalte** — `cols[].decimals` behebt Befund 05; **V0.8** ergänzt `cols[].format` (Währung, Prozent, ohne Tausenderpunkt) und `cols[].decimalsFixed`. Grundlage für die geplante bedingte Formatierung. Ohne feste Vorgabe wird weiterhin nie gekürzt — die Regel aus Befund 05 gilt auch für Währungen. |
 | ✅ erledigt | mittel | **Rohtext behalten, „Neu einlesen" anbieten** — behebt Befund 12, macht die geplante Encoding-Auswahl erst umsetzbar. |
-| Sinnvoll | klein | **Spaltenstatistik-Panel** (Roadmap) — mit dem vorhandenen Typsystem fast geschenkt: Min, Max, Median, eindeutige Werte, Leeranteil. Schnellster sichtbarer Zugewinn. |
-| Sinnvoll | mittel | **Duplikat-Erkennung über ausgewählte Spalten** (Roadmap) — mit `batch` ein einziger Undo-Schritt. |
+| ✅ erledigt | klein | **Spaltenstatistik-Panel** (Roadmap) — **V0.8**: Min, Max, Summe, Mittelwert, Median, Standardabweichung, eindeutige Werte, Leeranteil, häufigste Werte; für Datum Zeitraum, für Text Länge. Rechnet über `visibleIndices`, also passend zum gesetzten Filter. |
+| ✅ erledigt | mittel | **Duplikat-Erkennung über ausgewählte Spalten** (Roadmap) — **V0.8**: Schlüsselspalten frei wählbar, Normalisierung optional, erstes oder letztes Vorkommen behalten. Entfernen ist ein `delRows`-Befehl und damit ein Undo-Schritt. |
 | Später | groß | **Streaming-Parser im Web Worker** — aktuell liest `readAsText` die ganze Datei in den Speicher und das Parsen blockiert den Hauptthread. Dehnt die 500k-Zusage auf sehr große Dateien aus und macht den Ladebalken echt. |
 | Später | mittel | **Mehrspaltige Sortierung und Sitzungspersistenz** (Roadmap) — Sortierung nur von einem Feld auf eine Kriterienliste erweitern; `appState` ist bereits serialisierbar, nur die `Set`-Felder brauchen eine Umwandlung. |
 
@@ -510,6 +510,7 @@ sechs Zeilen sind mit V0.6.1 umgesetzt und hier als Beleg stehen geblieben.
 | Undo als ein Schritt je Aktion | erfüllt | Befehlstyp `batch` (10) |
 | Konstante `FROZEN_ROWS_MAX` | erfüllt | im Code, benutzt an beiden Stellen |
 | `excluded` als Set | bewusst abweichend | Array + `Set` in einer `WeakMap`; die Historie serialisiert weiterhin das Array (in der Spezifikation nachgezogen) |
+| Spaltenstatistik, Duplikat-Erkennung (Roadmap) | erfüllt | mit V0.8 nachgezogen, siehe Abschnitt 4 |
 | 500.000+ Zeilen | erfüllt | Pfeiltaste 5,7 ms bei 200.000 Zeilen (07). Laden bleibt einmalig teuer, siehe Streaming-Parser in Abschnitt 4 |
 
 ---
@@ -524,6 +525,6 @@ npm test                        # = node tools/befunde-repro.mjs
 Das Skript startet Chromium, lädt `index.html` per `file://`, ruft die globalen Funktionen der App
 direkt auf und prüft jeden Befund einzeln. Ausgabe: eine Zeile pro Befund mit Messwerten.
 
-Erwartung: **32 bestanden, 0 auffällig.** Ein `FAIL` bedeutet, dass ein behobener Befund wieder
+Erwartung: **41 bestanden, 0 auffällig.** Ein `FAIL` bedeutet, dass ein behobener Befund wieder
 eingebaut wurde. Die Messwerte in diesem Dokument stammen aus diesem Skript; wer sie zitiert,
 sollte sie vorher neu erheben — sie schwanken je nach Maschine um etwa ±50 %.

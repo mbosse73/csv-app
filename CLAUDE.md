@@ -25,7 +25,7 @@ Weitere Vorgaben:
 
 ## Aufbau
 
-`index.html` ist in 22 Abschnitte gegliedert, jeweils mit einem Kommentar-Banner. **Navigiere über
+`index.html` ist in 24 Abschnitte gegliedert, jeweils mit einem Kommentar-Banner. **Navigiere über
 diese Banner, nicht über Zeilennummern** — die verschieben sich bei jeder Änderung:
 
 ```
@@ -34,7 +34,8 @@ grep -n '^   [A-ZÄÖÜ]' index.html      # listet alle Abschnittsüberschriften
 
 Reihenfolge: CONSTANTS/STATE · HISTORY · PARSER · COLUMN-TYPES · LOADER · FILTER/SORT · SELECTION ·
 RENDER · EDIT · CLIPBOARD · STRUCTURE OPS · AUTOFILL · CONTEXT MENU · FILTER POPUP · ACTIONS ·
-EXPORT · SEARCH · SUCHEN & ERSETZEN · OPTIONS MENU · HELPERS · GLOBAL EVENTS · WIRING
+EXPORT · SEARCH · SUCHEN & ERSETZEN · SPALTENSTATISTIK · DUPLIKATE · OPTIONS MENU · HELPERS ·
+GLOBAL EVENTS · WIRING
 
 ### Datenkette — das zentrale Modell
 
@@ -137,14 +138,15 @@ Es gibt kein Testframework. Geprüft wird, indem ein echter Browser die App fern
 legt ihren Zustand und ihre Funktionen global ab, deshalb genügt `page.evaluate()`.
 
 ```bash
-npm test                  # 32 Prüfungen, alle müssen OK sein
+npm test                  # 41 Prüfungen, alle müssen OK sein
 npm run shot              # Screenshot nach tools/out/app.png
 node tools/screenshot.mjs --theme dark --rows 5000 --frozen 20 --rowh 20 --scroll 20000
 ```
 
 **Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Die Suite deckt die 19 behobenen
 Befunde plus Gegenproben ab (XLSX, Undo, `batch`-Undo, XSS-Escaping, AutoFill, Zelleditor,
-Listener-Anhäufung, Suche, Neu-Einlesen, Zahlenparser) und fährt am Ende echte Mausaktionen
+Listener-Anhäufung, Suche, Neu-Einlesen, Zahlenparser), dazu die Funktionen aus V0.8
+(Spaltenformat, Statistik, Duplikate), und fährt am Ende echte Mausaktionen
 (Klick, Ziehen, Doppelklick, Rechtsklick). Ein `FAIL` heißt: ein behobener Befund ist zurück.
 Neue Funktionen brauchen dort eine neue Prüfung.
 
@@ -161,14 +163,13 @@ Binary unter `/opt/pw-browsers/chromium` aus — Tests laufen also auch nach ein
 `ANALYSE.md` ist das Befundprotokoll: 19 Befunde mit Fundstelle, Messwert, Lösungsansatz und
 umgesetzter Lösung. **Alle sind behoben** (V0.6.1) — das Dokument bleibt als Begründung dafür
 erhalten, warum bestimmte Stellen so aussehen, wie sie aussehen. Abschnitt 4 listet die noch
-offenen Weiterentwicklungsvorschläge, die lohnendsten zuerst:
+offenen Weiterentwicklungsvorschläge. Die drei kleinen und mittleren sind mit **V0.8** umgesetzt
+(Spaltenstatistik, Anzeigeformat je Spalte, Duplikat-Erkennung). Offen bleiben die großen:
 
-1. **Spaltenstatistik-Panel** — mit dem vorhandenen Typsystem fast geschenkt, größter sichtbarer
-   Zugewinn pro Aufwand.
-2. **Anzeigeformat pro Spalte** (Währung, Prozent, feste Stellen) — `cols[].decimals` ist der
-   Anfang; das entschärft auch die `1.234`-Mehrdeutigkeit im Zahlenparser.
-3. **Streaming-Parser im Web Worker** — `readAsText` liest die ganze Datei in den Speicher und
+1. **Streaming-Parser im Web Worker** — `readAsText` liest die ganze Datei in den Speicher und
    das Parsen blockiert den Hauptthread.
+2. **Mehrspaltige Sortierung und Sitzungspersistenz** — `appState.sort` von einem Feld auf eine
+   Kriterienliste erweitern; für die Persistenz müssen die `Set`-Felder umgewandelt werden.
 
 ## Dokumente pflegen
 
@@ -182,9 +183,16 @@ offenen Weiterentwicklungsvorschläge, die lohnendsten zuerst:
 
 ## Fallstricke
 
-- **`formatValue()` ist reine Anzeige.** CSV, TSV und XLSX exportieren Rohwerte bzw. echte Zahlen;
-  Markdown, HTML und Jira benutzen `formatValue` und sind damit kein verlustfreier Roundtrip.
-  Für Zellen `ColumnTypes.formatCell(ci, v)` benutzen — das zieht Typ *und* `cols[ci].decimals`.
+- **Formatierung ist reine Anzeige.** CSV, TSV und XLSX exportieren Rohwerte bzw. echte Zahlen;
+  Markdown, HTML und Jira geben formatierte Werte aus und sind damit kein verlustfreier Roundtrip.
+  Für Zellen `ColumnTypes.formatCell(ci, v)` benutzen — das zieht Typ, `cols[ci].decimals`,
+  `cols[ci].format` und `cols[ci].decimalsFixed`. Im heißen Renderpfad einmal je Spalte
+  `ColumnTypes.formatSpec(ci)` holen und `formatWith(v, typ, spec)` aufrufen.
+- **Ohne feste Stellenzahl wird nie gekürzt.** `decimalsFixed === null` heißt: mindestens so viele
+  Nachkommastellen wie die Spalte führt, höchstens `DECIMALS_MAX` — das ist Befund 05. Erst eine
+  ausdrückliche Vorgabe rundet. Auch das Währungsformat rundet von sich aus nicht auf zwei Stellen.
+- **Bereichsfilter arbeiten auf Rohwerten.** Steht eine Spalte auf „Prozent (Anteil ×100)", zeigt
+  das Raster `15,2 %`, der Bereichsfilter erwartet aber weiterhin `0.152`.
 - **Sortierung verändert `rows` nie** — nur `visibleIndices`. Wer mit `data-rix` aus dem DOM
   arbeitet, hat einen Roh-Index in der Hand, keine Anzeigeposition. `visibleIndices` ist nach dem
   Sortieren **nicht aufsteigend** — keine Binärsuche darauf.
@@ -197,3 +205,6 @@ offenen Weiterentwicklungsvorschläge, die lohnendsten zuerst:
   Streaming-Parser baut, muss sich hier etwas überlegen.
 - **Zellinhalte immer durch `escapeHTML()`** schicken, Attributwerte durch `escapeAttr()`.
   Kein `innerHTML` mit ungeprüften Daten.
+- **Statistik und Duplikatsuche lesen `visibleIndices`**, nicht `rows`. Eine Kennzahl, die den
+  gerade gesetzten Filter ignoriert, beantwortet nicht die Frage, für die man sie öffnet — und
+  `removeDuplicates()` würde sonst Zeilen löschen, die der Nutzer gar nicht sieht.

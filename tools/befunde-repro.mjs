@@ -410,6 +410,166 @@ const { page, fehler: jsErrors, close } = await openApp();
     `Werte danach: ${autofill.werte} (ausgefilterte 99 intakt, sichtbare fortgeschrieben)`);
 }
 
+/* ---------- V0.8: Anzeigeformat je Spalte ---------- */
+{
+  const r = await page.evaluate(() => {
+    loadCSVText('Artikel,Preis,Anteil\nLaptop,1299.90,0.152\nMaus,24.50,0.088', 'f.csv', 0);
+    const raus = { auto: ColumnTypes.formatCell(1, '1299.90') };
+    const setze = (ci, key, wert) => { appState.cols[ci][key] = wert; };
+    setze(1, 'format', 'eur');       raus.eur = ColumnTypes.formatCell(1, '1299.9');
+    setze(1, 'format', 'usd');       raus.usd = ColumnTypes.formatCell(1, '1299.9');
+    setze(1, 'format', 'plain');     raus.ohnePunkt = ColumnTypes.formatCell(1, '1299.9');
+    setze(1, 'format', 'auto');
+    setze(2, 'format', 'percent');     raus.prozent = ColumnTypes.formatCell(2, '0.152');
+    setze(2, 'format', 'percent-raw'); raus.prozentRoh = ColumnTypes.formatCell(2, '15.2');
+    setze(2, 'format', 'auto');
+    // Text und unlesbare Werte bleiben unangetastet
+    raus.text = ColumnTypes.formatCell(0, 'Laptop');
+    setze(1, 'format', 'eur');
+    raus.unlesbar = ColumnTypes.formatCell(1, 'k.A.');
+    raus.leer = ColumnTypes.formatCell(1, '');
+    // Intl setzt vor Währungszeichen ein geschütztes Leerzeichen — für den Vergleich normalisieren.
+    for (const k of Object.keys(raus)) raus[k] = raus[k].replace(/[\u00A0\u202F]/g, ' ');
+    return raus;
+  });
+  check('––', 'Spaltenformat: Währung, Prozent, ohne Tausenderpunkt',
+    r.auto === '1.299,90' && r.eur === '1.299,90 €' && r.usd === '1.299,90 $' &&
+    r.ohnePunkt === '1299,90' && r.prozent === '15,2 %' && r.prozentRoh === '15,2 %' &&
+    r.text === 'Laptop' && r.unlesbar === 'k.A.' && r.leer === '',
+    `auto=${r.auto} · €=${r.eur} · $=${r.usd} · ohne=${r.ohnePunkt} · %=${r.prozent} · %roh=${r.prozentRoh}`);
+}
+
+{
+  const r = await page.evaluate(() => {
+    loadCSVText('Wert\n1299.905\n2.5', 'd.csv', 0);
+    const auto = ColumnTypes.formatCell(0, '1299.905');
+    appState.cols[0].decimalsFixed = 2;
+    const fest2 = ColumnTypes.formatCell(0, '1299.905');
+    appState.cols[0].decimalsFixed = 0;
+    const fest0 = ColumnTypes.formatCell(0, '1299.905');
+    return { auto, fest2, fest0 };
+  });
+  // Ohne feste Vorgabe wird nie abgeschnitten (Befund 05), mit Vorgabe wird gerundet.
+  check('––', 'Feste Nachkommastellen runden, automatische kürzen nie',
+    r.auto === '1.299,905' && r.fest2 === '1.299,91' && r.fest0 === '1.300',
+    `auto=${r.auto} · fest2=${r.fest2} · fest0=${r.fest0}`);
+}
+
+{
+  const r = await page.evaluate(() => {
+    loadCSVText('Artikel,Preis\nLaptop,1299.9\nMaus,24.5', 'e.csv', 0);
+    const mdVorher = buildMarkdown().split('\n')[2];
+    const schritteVor = appState.history.past.length;
+    setColMetaMulti([1], 'format', 'eur', 'Spaltenformat');
+    const mdNachher = buildMarkdown().split('\n')[2].replace(/[\u00A0\u202F]/g, ' ');
+    const csv = serializeCSV(appState.headers, appState.rows, ',').split('\r\n')[1];
+    const schritte = appState.history.past.length - schritteVor;
+    undo();
+    return { mdVorher, mdNachher, csv, schritte, nachUndo: appState.cols[1].format };
+  });
+  check('––', 'Format wirkt im Markdown-Export, CSV bleibt roh',
+    r.mdNachher.includes('1.299,90 €') && !r.mdVorher.includes('€') &&
+    r.csv === 'Laptop,1299.9' && r.schritte === 1 && r.nachUndo === 'auto',
+    `md: ${r.mdVorher.trim()} → ${r.mdNachher.trim()} · CSV: ${r.csv} · ${r.schritte} Undo-Schritt`);
+}
+
+/* ---------- V0.8: Spaltenstatistik ---------- */
+{
+  const r = await page.evaluate(() => {
+    const z = [];
+    for (let i = 1; i <= 10; i++) z.push(`N${i},${i * 10},${i % 2 ? 'A' : 'B'}`);
+    z.push('N11,,A');   // eine leere Zelle
+    loadCSVText('Name,Menge,Gruppe\n' + z.join('\n'), 's.csv', 0);
+    const alle = computeColumnStats(1);
+    appState.cols[2].filter = { kind: 'values', excluded: ['B'] };
+    rebuildVisible();
+    const gefiltert = computeColumnStats(1);
+    return {
+      n: alle.n, leer: alle.leer, eindeutig: alle.eindeutig,
+      min: alle.min, max: alle.max, summe: alle.summe, median: alle.median,
+      stdabw: +alle.stdabw.toFixed(4),
+      gefiltertGesamt: gefiltert.gesamt, gefiltertSumme: gefiltert.summe,
+    };
+  });
+  check('––', 'Statistik: Kennzahlen und Leeranteil stimmen',
+    r.n === 10 && r.leer === 1 && r.eindeutig === 10 && r.min === 10 && r.max === 100 &&
+    r.summe === 550 && r.median === 55 && r.stdabw === 30.2765,
+    `n=${r.n} leer=${r.leer} min=${r.min} max=${r.max} Σ=${r.summe} Median=${r.median} s=${r.stdabw}`);
+  check('––', 'Statistik rechnet nur über sichtbare Zeilen',
+    r.gefiltertGesamt === 6 && r.gefiltertSumme === 250,
+    `gefiltert: ${r.gefiltertGesamt} Zeilen, Σ=${r.gefiltertSumme} (ungefiltert Σ=550)`);
+}
+
+{
+  const r = await page.evaluate(() => {
+    loadCSVText('A,B,C\nx,1,q\ny,2,q\nx,3,q', 'd.csv', 0);
+    appState.cols[1].hidden = true;
+    openStatsModal(0);
+    const optionen = [...document.querySelectorAll('#stats-col option')].map(o => o.textContent).join(',');
+    const inhalt = document.getElementById('stats-body').textContent.replace(/\s+/g, ' ');
+    const offen = document.getElementById('stats-modal').classList.contains('show');
+    closeStatsModal();
+    return { optionen, inhalt, offen, zu: !document.getElementById('stats-modal').classList.contains('show') };
+  });
+  check('––', 'Statistik-Dialog listet nur sichtbare Spalten',
+    r.offen && r.zu && r.optionen === 'A,C' && r.inhalt.includes('x') && r.inhalt.includes('2×'),
+    `Spalten im Dialog: ${r.optionen} · häufigster Wert im Inhalt: ${r.inhalt.includes('2×')}`);
+}
+
+/* ---------- V0.8: Duplikate ---------- */
+{
+  const r = await page.evaluate(() => {
+    loadCSVText('Name,Ort\nAnna,Berlin\nBernd,Kiel\nanna ,Berlin\nAnna,Berlin\nCarla,Mainz', 'dup.csv', 0);
+    const o = (ic, tr, keep) => ({ ignoreCase: ic, trim: tr, keep });
+    return {
+      genau: findDuplicates([0, 1], o(false, false, 'first')),
+      lax: findDuplicates([0, 1], o(true, true, 'first')),
+      letzte: findDuplicates([0, 1], o(false, false, 'last')),
+      nurOrt: findDuplicates([1], o(false, false, 'first')),
+      keine: findDuplicates([], o(false, false, 'first')),
+    };
+  });
+  check('––', 'Duplikatsuche: Normalisierung und Schlüsselspalten wirken',
+    r.genau.treffer === 1 && r.genau.entfernen.join() === '3' &&
+    r.lax.treffer === 2 && r.lax.entfernen.join() === '2,3' &&
+    r.letzte.entfernen.join() === '0' &&
+    r.nurOrt.treffer === 2 && r.keine.treffer === 0,
+    `genau=${r.genau.treffer} lax=${r.lax.treffer} nurOrt=${r.nurOrt.treffer} · „letztes behalten" entfernt ${r.letzte.entfernen.join()}`);
+}
+
+{
+  const r = await page.evaluate(() => {
+    loadCSVText('Name,Ort\nAnna,Berlin\nBernd,Kiel\nAnna,Berlin\nCarla,Mainz\nBernd,Kiel', 'dup.csv', 0);
+    openDupModal([0, 1]);
+    const info = document.getElementById('dup-info').textContent;
+    const schritteVor = appState.history.past.length;
+    removeDuplicates();
+    const nachher = appState.rows.map(x => x.join('|')).join(' , ');
+    const schritte = appState.history.past.length - schritteVor;
+    const zu = !document.getElementById('dup-modal').classList.contains('show');
+    undo();
+    return { info, nachher, schritte, zu, nachUndo: appState.rows.length };
+  });
+  check('––', 'Duplikate entfernen ist genau ein Undo-Schritt',
+    r.nachher === 'Anna|Berlin , Bernd|Kiel , Carla|Mainz' && r.schritte === 1 &&
+    r.nachUndo === 5 && r.zu,
+    `danach: ${r.nachher} · ${r.schritte} Schritt · nach Undo wieder ${r.nachUndo} Zeilen`);
+}
+
+{
+  const r = await page.evaluate(() => {
+    loadCSVText('Name,Grp\nA,X\nA,Y\nA,X\nB,Y', 'df.csv', 0);
+    appState.cols[1].filter = { kind: 'values', excluded: ['Y'] };
+    rebuildVisible();
+    const d = findDuplicates([0], { ignoreCase: false, trim: false, keep: 'first' });
+    return { sichtbar: appState.visibleIndices.length, treffer: d.treffer, entfernen: d.entfernen.join() };
+  });
+  // Zeile 1 („A,Y") ist ausgefiltert und darf nicht als Duplikat von Zeile 0 zählen.
+  check('––', 'Duplikatsuche fasst nur sichtbare Zeilen an',
+    r.sichtbar === 2 && r.treffer === 1 && r.entfernen === '2',
+    `${r.sichtbar} sichtbar · ${r.treffer} Wiederholung · entfernt würde Zeile ${r.entfernen}`);
+}
+
 /* ---------- Bedienung mit echter Maus (prüft Delegation + Positionsmodell) ---------- */
 {
   await page.evaluate(() => loadCSVText('P,Q,R\nA,1,x\nB,2,y\nC,3,z\nD,4,w', 'maus.csv', 0));

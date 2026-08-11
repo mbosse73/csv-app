@@ -265,7 +265,31 @@
   .modal h3 { margin:0 0 12px; font-size:16px; }
   .modal .kbd-grid { display:grid; grid-template-columns:1fr auto; gap:6px 18px; font-size:13px; }
   .modal .kbd-grid .lbl { color:var(--text-muted); }
-  .modal .close-row { display:flex; justify-content:flex-end; margin-top:16px; }
+  .modal .close-row { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+
+  /* Spaltenstatistik */
+  .st-head { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .st-head select { flex:1; padding:6px 8px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--bg-panel); color:var(--text); font-size:13px; font-family:var(--sans); }
+  .st-sec { margin:14px 0 6px; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; font-weight:600; color:var(--text-soft); }
+  .st-grid { display:grid; grid-template-columns:1fr auto; gap:5px 18px; font-size:13px; }
+  .st-grid .lbl { color:var(--text-muted); }
+  .st-grid .val { font-family:var(--mono); font-size:12.5px; text-align:right; white-space:nowrap; }
+  .st-top { display:flex; flex-direction:column; gap:3px; font-size:12.5px; }
+  .st-top .row { position:relative; display:flex; justify-content:space-between; gap:14px; padding:3px 7px; border-radius:4px; overflow:hidden; }
+  .st-top .bar { position:absolute; inset:0 auto 0 0; background:var(--accent-soft); z-index:0; }
+  .st-top .txt, .st-top .cnt { position:relative; z-index:1; }
+  .st-top .txt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .st-top .cnt { font-family:var(--mono); font-size:11.5px; color:var(--text-muted); white-space:nowrap; }
+  .st-note { margin-top:12px; font-size:11.5px; color:var(--text-soft); }
+
+  /* Duplikate */
+  .dup-cols { max-height:190px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius-sm); padding:4px; }
+  .dup-cols label { display:flex; align-items:center; gap:7px; padding:4px 7px; border-radius:4px; font-size:13px; cursor:pointer; }
+  .dup-cols label:hover { background:var(--bg-hover); }
+  .dup-opts { display:flex; flex-wrap:wrap; gap:14px; margin:12px 0 4px; font-size:12.5px; }
+  .dup-opts label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .dup-info { margin-top:12px; padding:9px 11px; border-radius:var(--radius-sm); background:var(--bg-hover); font-size:13px; }
+  .dup-info b { font-family:var(--mono); }
 
   ::-webkit-scrollbar { width:11px; height:11px; }
   ::-webkit-scrollbar-track { background:transparent; }
@@ -439,9 +463,45 @@
       <span class="lbl">Suche: nur Treffer anzeigen</span><span>Schalter „Nur Treffer" im Suchfeld</span>
       <span class="lbl">Filter-Popup öffnen</span><span>Klick auf Trichter-Icon im Header</span>
       <span class="lbl">Spaltentyp ändern</span><span>Spaltenmenü „▾" → Typ</span>
+      <span class="lbl">Anzeigeformat der Spalte</span><span>Rechtsklick auf Kopfzeile → Format</span>
+      <span class="lbl">Spaltenstatistik</span><span><kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd></span>
+      <span class="lbl">Duplikate suchen und entfernen</span><span><kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span>
       <span class="lbl">Hilfe öffnen</span><span><kbd>?</kbd></span>
     </div>
     <div class="close-row"><button class="tb-btn primary" id="help-close" style="padding:6px 14px">Schließen</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="stats-modal">
+  <div class="modal" style="max-width:480px">
+    <h3>Spaltenstatistik</h3>
+    <div class="st-head"><select id="stats-col"></select></div>
+    <div id="stats-body"></div>
+    <div class="close-row">
+      <button class="tb-btn" id="stats-copy">Kopieren</button>
+      <button class="tb-btn primary" id="stats-close" style="padding:6px 14px">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="dup-modal">
+  <div class="modal" style="max-width:480px">
+    <h3>Duplikate</h3>
+    <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:8px">Spalten, die eine Zeile eindeutig machen:</div>
+    <div class="dup-cols" id="dup-cols"></div>
+    <div class="dup-opts">
+      <label><input type="checkbox" id="dup-case"/> Groß-/Kleinschreibung ignorieren</label>
+      <label><input type="checkbox" id="dup-trim" checked/> Leerraum am Rand ignorieren</label>
+    </div>
+    <div class="dup-opts">
+      <label><input type="radio" name="dup-keep" value="first" checked/> Erstes Vorkommen behalten</label>
+      <label><input type="radio" name="dup-keep" value="last"/> Letztes behalten</label>
+    </div>
+    <div class="dup-info" id="dup-info"></div>
+    <div class="close-row">
+      <button class="tb-btn" id="dup-close">Schließen</button>
+      <button class="tb-btn primary" id="dup-remove" style="padding:6px 14px">Duplikate entfernen</button>
+    </div>
   </div>
 </div>
 
@@ -521,7 +581,7 @@ function applyForward(cmd) {
     case 'moveRow': { const row = appState.rows.splice(cmd.from, 1)[0]; appState.rows.splice(cmd.to, 0, row); break; }
     case 'addCol':
       appState.headers.splice(cmd.at, 0, cmd.name);
-      appState.cols.splice(cmd.at, 0, { width:cmd.width, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, filter:null });
+      appState.cols.splice(cmd.at, 0, { width:cmd.width, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, format:'auto', decimalsFixed:null, filter:null });
       appState.rows.forEach(r => r.splice(cmd.at, 0, ''));
       break;
     case 'delCols': { const set = new Set(cmd.indices); appState.headers = appState.headers.filter((_,i)=>!set.has(i)); appState.cols = appState.cols.filter((_,i)=>!set.has(i)); appState.rows = appState.rows.map(r => r.filter((_,i)=>!set.has(i))); break; }
@@ -713,8 +773,51 @@ const ColumnTypes = (() => {
     const meta = appState.cols[ci];
     return meta && typeof meta.decimals === 'number' ? meta.decimals : 0;
   }
-  /** Anzeigeformat einer Zelle inklusive Spaltentyp und Spalten-Nachkommastellen. */
-  function formatCell(ci, v) { return formatValue(v, effectiveType(ci), decimalsFor(ci)); }
+  /**
+   * Anzeigeformat einer Spalte als Wertobjekt — einmal je Renderdurchlauf ermittelt
+   * und dann für jede Zelle wiederverwendet.
+   *   kind    'auto' | 'plain' | 'eur' | 'usd' | 'percent' | 'percent-raw'
+   *   fest    feste Nachkommastellen oder null (= aus den Daten abgeleitet)
+   *   auto    die abgeleiteten Nachkommastellen der Spalte
+   */
+  function formatSpec(ci) {
+    const meta = appState.cols[ci] || {};
+    return {
+      kind: meta.format || 'auto',
+      fest: typeof meta.decimalsFixed === 'number' ? meta.decimalsFixed : null,
+      auto: decimalsFor(ci),
+    };
+  }
+  /**
+   * Zahlformatierung nach Spaltenvorgabe. Ohne feste Stellenzahl bleibt die Regel aus
+   * Befund 05 gültig: mindestens so viele Nachkommastellen wie die Spalte führt,
+   * höchstens aber DECIMALS_MAX — abgeschnitten wird nie. Mit fester Stellenzahl ist
+   * genau diese gemeint, also wird gerundet.
+   */
+  function formatNumberWith(n, spec) {
+    const stellen = (vorgabe) => spec.fest !== null
+      ? { minimumFractionDigits: spec.fest, maximumFractionDigits: spec.fest }
+      : { minimumFractionDigits: Math.max(0, Math.min(DECIMALS_MAX, vorgabe)), maximumFractionDigits: DECIMALS_MAX };
+    switch (spec.kind) {
+      case 'plain':       return n.toLocaleString('de-DE', { useGrouping:false, ...stellen(spec.auto) });
+      case 'eur':         return n.toLocaleString('de-DE', { style:'currency', currency:'EUR', ...stellen(2) });
+      case 'usd':         return n.toLocaleString('de-DE', { style:'currency', currency:'USD', ...stellen(2) });
+      // Geschütztes Leerzeichen wie bei den Währungsformaten von Intl.
+      case 'percent':     return (n * 100).toLocaleString('de-DE', stellen(1)) + '\u00A0%';
+      case 'percent-raw': return n.toLocaleString('de-DE', stellen(1)) + '\u00A0%';
+      default:            return n.toLocaleString('de-DE', stellen(spec.auto));
+    }
+  }
+  /** Wie formatCell, aber mit vorberechneter Spezifikation (heißer Renderpfad). */
+  function formatWith(v, type, spec) {
+    if (v === '' || v == null) return '';
+    if (type !== 'number' || !spec) return formatValue(v, type, spec ? spec.auto : undefined);
+    const n = parseNumber(v);
+    if (isNaN(n)) return String(v);
+    return formatNumberWith(n, spec);
+  }
+  /** Anzeigeformat einer Zelle inklusive Spaltentyp, Nachkommastellen und Spaltenformat. */
+  function formatCell(ci, v) { return formatWith(v, effectiveType(ci), formatSpec(ci)); }
   function effectiveType(c) {
     const meta = appState.cols[c];
     if (!meta) return 'text';
@@ -770,7 +873,8 @@ const ColumnTypes = (() => {
     }
     return String(a).localeCompare(String(b), undefined, { numeric:true });
   }
-  return { parseNumber, parseDate, decimalsOf, detectType, detectAll, effectiveType, decimalsFor, formatValue, formatCell, compare };
+  return { parseNumber, parseDate, decimalsOf, detectType, detectAll, effectiveType, decimalsFor,
+           formatSpec, formatWith, formatValue, formatCell, compare };
 })();
 
 /* =============================================================
@@ -803,7 +907,7 @@ function loadCSVText(text, fileName, fileSize, quiet=false) {
   else { appState.headers = parsed[0].map((_,i) => `Spalte ${i+1}`); appState.rows = parsed; }
   appState.fileName = fileName; appState.fileSize = fileSize; appState.rawText = text;
   editingCell = null;   // offener Editor gehört zur alten Datei
-  appState.cols = appState.headers.map(() => ({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, filter:null }));
+  appState.cols = appState.headers.map(() => ({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, format:'auto', decimalsFixed:null, filter:null }));
   appState.sort = { col:-1, dir:0 }; appState.filter = '';
   appState.selection = null; appState.active = { r:0, c:0 };
   appState.history = { past:[], future:[] };
@@ -1178,7 +1282,7 @@ function renderHeader() {
  * @param vAbs  Position in appState.viewRows (maßgeblich für die Auswahl)
  */
 function buildRowHTML(vk, viewRow, ctx, vAbs) {
-  const { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, colDecimals } = ctx;
+  const { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, colFmt } = ctx;
   if (viewRow.kind === 'group') {
     const caret = viewRow.collapsed ? '▶' : '▼';
     const colHeader = appState.headers[viewRow.groupCol] ?? '';
@@ -1204,7 +1308,7 @@ function buildRowHTML(vk, viewRow, ctx, vAbs) {
     const { ci, width, pinned } = cols[ck];
     const t = colTypes[ck];
     const raw = row[ci] ?? '';
-    const display = ColumnTypes.formatValue(raw, t, colDecimals[ck]);
+    const display = ColumnTypes.formatWith(raw, t, colFmt[ck]);
     let cls = `gcell t-${t}`;
     if (sel) {
       let isS = false;
@@ -1245,8 +1349,8 @@ function renderVirtual() {
   const searchCur = appState.search.current >= 0 ? appState.search.hits[appState.search.current] : null;
   const searchSet = new Set(appState.search.hits.map(h => h.r + ':' + h.c));
   const colTypes = cols.map(co => ColumnTypes.effectiveType(co.ci));
-  const colDecimals = cols.map(co => ColumnTypes.decimalsFor(co.ci));
-  const ctx = { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, colDecimals };
+  const colFmt = cols.map(co => ColumnTypes.formatSpec(co.ci));
+  const ctx = { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, colFmt };
 
   const viewRows = appState.viewRows;
   const frozenN = Math.min(appState.frozenRows, viewRows.length);
@@ -1863,9 +1967,13 @@ function showContextMenu(x, y, kind) {
     else items.push({ label:'Nach dieser Spalte gruppieren', act:()=>{ appState.groupBy = ci; appState.collapsedGroups = new Set(); buildViewRows(); renderAll(); } });
     items.push({ divider:true });
     items.push({ label:`Typ: ${curType==='auto'?'Auto':typeLabel(curType)} ${curType==='auto'?'('+typeLabel(ColumnTypes.effectiveType(ci))+')':''}`.trim(), submenu: 'type', ci });
+    items.push({ label:`Format: ${formatLabel(ci)}`, submenu:'format', ci, ziele:selC });
     items.push({ label: appState.cols[ci].pinned?'Fixierung aufheben':'Spalte fixieren', act:()=>togglePin(ci) });
     items.push({ label:'Spalte ausblenden', act:()=>hideColumn(ci) });
     items.push({ label:'Auto-Breite', act:()=>autoFitColumn(ci) });
+    items.push({ divider:true });
+    items.push({ label:'Statistik…', act:()=>openStatsModal(ci) });
+    items.push({ label:'Duplikate…', act:()=>openDupModal(selC) });
     items.push({ divider:true });
     items.push({ label:'Spalte(n) löschen', danger:true, act:()=>deleteSelectedCols() });
   } else {
@@ -1873,7 +1981,7 @@ function showContextMenu(x, y, kind) {
     items.push({ divider:true });
     items.push({ label:'Aktive Zeile löschen', danger:true, act:()=>{ selectRow(appState.active.r); deleteSelectedRows(); } });
   }
-  menu.innerHTML = items.map(it => it.divider ? '<div class="divider"></div>' : `<div class="it ${it.danger?'danger':''}" ${it.submenu?'data-sub="'+it.submenu+'" data-ci="'+it.ci+'"':''}><span>${escapeHTML(it.label)}${it.submenu?' ▸':''}</span>${it.sc?`<span class="sc">${escapeHTML(it.sc)}</span>`:''}</div>`).join('');
+  menu.innerHTML = items.map(it => it.divider ? '<div class="divider"></div>' : `<div class="it ${it.danger?'danger':''}"><span>${escapeHTML(it.label)}${it.submenu?' ▸':''}</span>${it.sc?`<span class="sc">${escapeHTML(it.sc)}</span>`:''}</div>`).join('');
   host.appendChild(menu);
   menu.style.left = x + 'px'; menu.style.top = y + 'px';
   const r = menu.getBoundingClientRect();
@@ -1883,7 +1991,8 @@ function showContextMenu(x, y, kind) {
   menu.querySelectorAll('.it').forEach((el, idx) => {
     const it = actItems[idx];
     el.addEventListener('click', e => {
-      if (it.submenu === 'type') { e.stopPropagation(); showTypeSubmenu(it.ci, el.getBoundingClientRect()); return; }
+      if (it.submenu === 'type')   { e.stopPropagation(); showTypeSubmenu(it.ci, el.getBoundingClientRect()); return; }
+      if (it.submenu === 'format') { e.stopPropagation(); showFormatSubmenu(it.ci, el.getBoundingClientRect(), it.ziele); return; }
       hideContextMenu(); it.act && it.act();
     });
   });
@@ -1910,6 +2019,73 @@ function showTypeSubmenu(ci, anchorRect) {
   sub.querySelectorAll('.it').forEach(el => el.addEventListener('click', () => {
     const t = el.dataset.t;
     if (t !== cur) { pushHistory({ label:'Spaltentyp ändern', type:'colMeta', c:ci, key:'type', from:cur, to:t }); appState.cols[ci].type = t; renderAll(); }
+    hideContextMenu();
+  }));
+}
+/* ---- Anzeigeformat je Spalte ------------------------------------------------
+   Das Format ist reine Anzeige: CSV, TSV und XLSX exportieren weiterhin Rohwerte
+   bzw. echte Zahlen. Markdown, HTML und Jira übernehmen es, weil sie ohnehin
+   formatierte Werte schreiben. */
+const FORMAT_KINDS = [
+  { key:'auto',        lbl:'Automatisch',              bsp:'1.234,5' },
+  { key:'plain',       lbl:'Ohne Tausenderpunkt',      bsp:'1234,5' },
+  { key:'eur',         lbl:'Währung Euro',             bsp:'1.234,50 €' },
+  { key:'usd',         lbl:'Währung Dollar',           bsp:'1.234,50 $' },
+  { key:'percent',     lbl:'Prozent (Anteil ×100)',    bsp:'0,15 → 15,0 %' },
+  { key:'percent-raw', lbl:'Prozent (Wert unverändert)', bsp:'15 → 15,0 %' },
+];
+function formatKind(ci) { return (appState.cols[ci] && appState.cols[ci].format) || 'auto'; }
+function formatFixed(ci) { const m = appState.cols[ci]; return m && typeof m.decimalsFixed === 'number' ? m.decimalsFixed : null; }
+function formatLabel(ci) {
+  const k = FORMAT_KINDS.find(f => f.key === formatKind(ci));
+  const fest = formatFixed(ci);
+  return (k ? k.lbl : 'Automatisch') + (fest !== null ? ` · ${fest} Stellen` : '');
+}
+/** Setzt einen Meta-Schlüssel auf mehreren Spalten als EIN Undo-Schritt. */
+function setColMetaMulti(ziele, key, wert, label) {
+  const cmds = [];
+  for (const ci of ziele) {
+    const von = appState.cols[ci][key] ?? null;
+    if (von !== wert) cmds.push({ type:'colMeta', c:ci, key, from:von, to:wert });
+  }
+  if (!cmds.length) return false;
+  pushHistory({ label, type:'batch', cmds });
+  applyForward({ type:'batch', cmds });
+  renderAll();
+  return true;
+}
+function showFormatSubmenu(ci, anchorRect, ziele) {
+  const host = document.getElementById('ctx-menu-host');
+  const old = host.querySelector('.ctx-sub'); if (old) old.remove();
+  const cols = (ziele && ziele.length) ? ziele : [ci];
+  const sub = document.createElement('div'); sub.className = 'ctx-menu ctx-sub';
+  const cur = formatKind(ci), fest = formatFixed(ci);
+  const stellen = [null, 0, 1, 2, 3];
+  sub.innerHTML =
+    FORMAT_KINDS.map(f => `<div class="it" data-f="${f.key}"><span>${escapeHTML(f.lbl)}</span><span class="sc">${escapeHTML(f.bsp)}</span><span class="check">${cur===f.key?'✓':''}</span></div>`).join('') +
+    '<div class="divider"></div>' +
+    stellen.map(d => `<div class="it" data-d="${d === null ? '' : d}"><span>${d === null ? 'Stellen: automatisch' : `Stellen: ${d}`}</span><span class="check">${fest===d?'✓':''}</span></div>`).join('') +
+    '<div class="it" data-d="custom"><span>Stellen: eigene…</span><span class="check"></span></div>';
+  host.appendChild(sub);
+  sub.style.left = (anchorRect.right + 2) + 'px';
+  sub.style.top = anchorRect.top + 'px';
+  const r = sub.getBoundingClientRect();
+  if (r.right > innerWidth) sub.style.left = Math.max(4, anchorRect.left - r.width - 2) + 'px';
+  if (r.bottom > innerHeight) sub.style.top = Math.max(4, innerHeight - r.height - 8) + 'px';
+  const mehr = cols.length > 1 ? ` (${cols.length} Spalten)` : '';
+  sub.querySelectorAll('[data-f]').forEach(el => el.addEventListener('click', () => {
+    setColMetaMulti(cols, 'format', el.dataset.f, 'Spaltenformat' + mehr);
+    hideContextMenu();
+  }));
+  sub.querySelectorAll('[data-d]').forEach(el => el.addEventListener('click', () => {
+    const roh = el.dataset.d;
+    let wert;
+    if (roh === 'custom') {
+      const s = prompt(`Feste Nachkommastellen (0–${DECIMALS_MAX}, leer = automatisch):`, fest === null ? '' : String(fest));
+      if (s === null) { hideContextMenu(); return; }
+      wert = s.trim() === '' ? null : Math.max(0, Math.min(DECIMALS_MAX, parseInt(s, 10) || 0));
+    } else wert = roh === '' ? null : +roh;
+    setColMetaMulti(cols, 'decimalsFixed', wert, 'Nachkommastellen' + mehr);
     hideContextMenu();
   }));
 }
@@ -2192,7 +2368,7 @@ function newEmpty() {
   appState.rows = [['','',''], ['','',''], ['','','']];
   appState.rawText = serializeCSV(appState.headers, appState.rows, ',');
   editingCell = null;
-  appState.cols = appState.headers.map(()=>({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, filter:null }));
+  appState.cols = appState.headers.map(()=>({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, format:'auto', decimalsFixed:null, filter:null }));
   appState.delimiter = ','; appState.sort = { col:-1, dir:0 }; appState.filter = '';
   appState.selection = null; appState.active = {r:0,c:0}; appState.history = { past:[], future:[] }; appState.search = { hits:[], current:-1, query:'', onlyHits:false };
   appState.frozenRows = 0; appState.groupBy = null; appState.collapsedGroups = new Set();
@@ -2208,8 +2384,10 @@ function exportedRows() {
   const headers = cols.map(ci => appState.headers[ci]);
   const types = cols.map(ci => ColumnTypes.effectiveType(ci));
   const decimals = cols.map(ci => ColumnTypes.decimalsFor(ci));
+  // Anzeigeformat je Spalte: Markdown, HTML und Jira geben formatierte Werte aus.
+  const specs = cols.map(ci => ColumnTypes.formatSpec(ci));
   const rows = appState.visibleIndices.map(ri => cols.map(ci => appState.rows[ri][ci] ?? ''));
-  return { cols, headers, types, decimals, rows };
+  return { cols, headers, types, decimals, specs, rows };
 }
 
 /**
@@ -2269,9 +2447,9 @@ function escMD(v) {
     .replace(/\r?\n/g, '<br>');
 }
 function buildMarkdown() {
-  const { headers, types, decimals, rows } = exportedRows();
+  const { headers, types, specs, rows } = exportedRows();
   if (!headers.length) return '';
-  const display = rows.map(r => r.map((v, j) => escMD(ColumnTypes.formatValue(v, types[j], decimals[j]))));
+  const display = rows.map(r => r.map((v, j) => escMD(ColumnTypes.formatWith(v, types[j], specs[j]))));
   const widths = headers.map((h, j) => {
     let w = escMD(h).length;
     for (const r of display) if (r[j].length > w) w = r[j].length;
@@ -2352,7 +2530,7 @@ function exportJSON() {
 
 /* ---------- HTML ---------- */
 function buildHTML() {
-  const { headers, types, decimals, rows } = exportedRows();
+  const { headers, types, specs, rows } = exportedRows();
   const title = baseFileName() || 'Tabelle';
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   const align = t => (t === 'number' || t === 'date') ? 'right' : 'left';
@@ -2369,7 +2547,7 @@ function buildHTML() {
   `;
   const thead = headers.map((h, j) => `<th class="${types[j]==='number'?'num':types[j]==='date'?'date':''}">${escapeHTML(h)}</th>`).join('');
   const tbody = rows.map(r => '<tr>' + r.map((v, j) => {
-    const disp = ColumnTypes.formatValue(v, types[j], decimals[j]);
+    const disp = ColumnTypes.formatWith(v, types[j], specs[j]);
     const cls = types[j] === 'number' ? 'num' : types[j] === 'date' ? 'date' : '';
     return `<td class="${cls}">${escapeHTML(disp)}</td>`;
   }).join('') + '</tr>').join('\n');
@@ -2410,7 +2588,7 @@ function escJira(v) {
     .replace(/\r?\n/g, ' \\\\ ');  // Jira Wiki: \\ erzwingt Zeilenumbruch
 }
 function buildJira() {
-  const { headers, types, decimals, rows } = exportedRows();
+  const { headers, types, specs, rows } = exportedRows();
   if (!headers.length) return '';
   const lines = [];
   // Header-Zeile: doppelte Pipes
@@ -2418,7 +2596,7 @@ function buildJira() {
   // Datenzeilen: einfache Pipes; leere Zellen als einzelnes Leerzeichen (sonst kollabiert die Zelle)
   for (const r of rows) {
     lines.push('|' + r.map((v, j) => {
-      const s = escJira(ColumnTypes.formatValue(v, types[j], decimals[j]));
+      const s = escJira(ColumnTypes.formatWith(v, types[j], specs[j]));
       return s === '' ? ' ' : s;
     }).join('|') + '|');
   }
@@ -2937,6 +3115,245 @@ function srReplaceAll() {
 }
 
 /* =============================================================
+   SPALTENSTATISTIK
+
+   Ausgewertet werden ausschließlich die SICHTBAREN Zeilen (appState.visibleIndices)
+   — eine Statistik, die einen gerade gesetzten Filter ignoriert, wäre wertlos für
+   genau den Zweck, für den man sie öffnet.
+   ============================================================= */
+const STATS_TOP_N = 5;
+
+function computeColumnStats(ci) {
+  const idx = appState.visibleIndices;
+  const type = ColumnTypes.effectiveType(ci);
+  const freq = new Map();
+  const zahlen = [];
+  let leer = 0, unlesbar = 0, minLen = Infinity, maxLen = 0;
+  for (const r of idx) {
+    const v = appState.rows[r] ? (appState.rows[r][ci] ?? '') : '';
+    if (v === '') { leer++; continue; }
+    freq.set(v, (freq.get(v) || 0) + 1);
+    if (v.length < minLen) minLen = v.length;
+    if (v.length > maxLen) maxLen = v.length;
+    if (type === 'number') { const n = ColumnTypes.parseNumber(v); if (!isNaN(n) && isFinite(n)) zahlen.push(n); else unlesbar++; }
+    else if (type === 'date') { const t = ColumnTypes.parseDate(v); if (!isNaN(t)) zahlen.push(t); else unlesbar++; }
+  }
+  const gefuellt = idx.length - leer;
+  const s = {
+    ci, type, gesamt: idx.length, gefuellt, leer, unlesbar,
+    eindeutig: freq.size,
+    minLen: gefuellt ? minLen : 0, maxLen,
+    top: [...freq.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'de')).slice(0, STATS_TOP_N),
+    n: zahlen.length, min: null, max: null, summe: null, mittel: null, median: null, stdabw: null,
+  };
+  if (zahlen.length) {
+    // Kahan-Summation: bei sechsstelligen Zeilenzahlen wandert die naive Summe sonst
+    // sichtbar in den Nachkommastellen.
+    let summe = 0, komp = 0;
+    let min = Infinity, max = -Infinity;
+    for (const n of zahlen) {
+      const y = n - komp, t = summe + y;
+      komp = (t - summe) - y; summe = t;
+      if (n < min) min = n;
+      if (n > max) max = n;
+    }
+    const sortiert = zahlen.slice().sort((a, b) => a - b);
+    const m = sortiert.length;
+    s.min = min; s.max = max; s.summe = summe; s.mittel = summe / m;
+    s.median = m % 2 ? sortiert[(m - 1) / 2] : (sortiert[m / 2 - 1] + sortiert[m / 2]) / 2;
+    if (m > 1) {
+      let qs = 0;
+      for (const n of zahlen) qs += (n - s.mittel) ** 2;
+      s.stdabw = Math.sqrt(qs / (m - 1));   // Stichprobe (n−1)
+    }
+  }
+  return s;
+}
+
+/** Zahl in Spaltenschreibweise — nutzt das eingestellte Anzeigeformat der Spalte. */
+function statsZahl(ci, n) { return n == null ? '–' : ColumnTypes.formatCell(ci, String(n)); }
+function statsDatum(t) {
+  if (t == null) return '–';
+  const d = new Date(t);   // parseDate baut lokale Zeiten — toISOString verschoebe den Tag
+  return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+}
+
+/** Liefert die Statistik als Beschriftung/Wert-Paare — Grundlage für Anzeige und Kopieren. */
+function statsPaare(s) {
+  const ci = s.ci;
+  const anteil = (n) => s.gesamt ? ` (${(n / s.gesamt * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 })} %)` : '';
+  const p = [
+    ['Typ', typeLabel(s.type)],
+    ['Zeilen (sichtbar)', s.gesamt.toLocaleString('de-DE')],
+    ['Gefüllt', s.gefuellt.toLocaleString('de-DE') + anteil(s.gefuellt)],
+    ['Leer', s.leer.toLocaleString('de-DE') + anteil(s.leer)],
+    ['Eindeutige Werte', s.eindeutig.toLocaleString('de-DE')],
+  ];
+  if (s.type === 'number') {
+    p.push(['—Zahlen—', null]);
+    p.push(['Minimum', statsZahl(ci, s.min)]);
+    p.push(['Maximum', statsZahl(ci, s.max)]);
+    p.push(['Summe', statsZahl(ci, s.summe)]);
+    p.push(['Mittelwert', statsZahl(ci, s.mittel)]);
+    p.push(['Median', statsZahl(ci, s.median)]);
+    // Die Streuung steht in derselben Einheit wie die Spalte, wird also auch so formatiert.
+    // Vorher gerundet, damit die Gleitkomma-Nachkommastellen nicht durchschlagen.
+    p.push(['Standardabw. (Stichprobe)', s.stdabw == null ? '–' : statsZahl(ci, +s.stdabw.toFixed(4))]);
+    if (s.unlesbar) p.push(['Nicht als Zahl lesbar', s.unlesbar.toLocaleString('de-DE')]);
+  } else if (s.type === 'date') {
+    p.push(['—Zeitraum—', null]);
+    p.push(['Frühestes', statsDatum(s.min)]);
+    p.push(['Spätestes', statsDatum(s.max)]);
+    p.push(['Spanne', s.min == null ? '–' : Math.round((s.max - s.min) / 86400000).toLocaleString('de-DE') + ' Tage']);
+    if (s.unlesbar) p.push(['Nicht als Datum lesbar', s.unlesbar.toLocaleString('de-DE')]);
+  } else {
+    p.push(['—Text—', null]);
+    p.push(['Kürzester Wert', s.gefuellt ? s.minLen + ' Zeichen' : '–']);
+    p.push(['Längster Wert', s.gefuellt ? s.maxLen + ' Zeichen' : '–']);
+  }
+  return p;
+}
+
+function renderStatsBody(ci) {
+  const s = computeColumnStats(ci);
+  const body = document.getElementById('stats-body');
+  let html = '<div class="st-grid">';
+  for (const [lbl, val] of statsPaare(s)) {
+    if (val === null) { html += `</div><div class="st-sec">${escapeHTML(lbl.replace(/—/g, ''))}</div><div class="st-grid">`; continue; }
+    html += `<span class="lbl">${escapeHTML(lbl)}</span><span class="val">${escapeHTML(val)}</span>`;
+  }
+  html += '</div>';
+  if (s.top.length) {
+    const maxN = s.top[0][1];
+    html += `<div class="st-sec">Häufigste Werte</div><div class="st-top">` + s.top.map(([w, n]) =>
+      `<div class="row"><div class="bar" style="width:${(n / maxN * 100).toFixed(1)}%"></div>` +
+      `<span class="txt">${escapeHTML(ColumnTypes.formatCell(ci, w))}</span>` +
+      `<span class="cnt">${n.toLocaleString('de-DE')}×</span></div>`).join('') + '</div>';
+  }
+  if (s.gesamt < appState.rows.length) {
+    html += `<div class="st-note">Bezieht sich auf die ${s.gesamt.toLocaleString('de-DE')} sichtbaren von ${appState.rows.length.toLocaleString('de-DE')} Zeilen.</div>`;
+  }
+  body.innerHTML = html;
+}
+
+function statsAlsText(ci) {
+  const s = computeColumnStats(ci);
+  const zeilen = [`Spalte: ${appState.headers[ci]}`];
+  for (const [lbl, val] of statsPaare(s)) zeilen.push(val === null ? '' : `${lbl}: ${val}`);
+  if (s.top.length) {
+    zeilen.push('', 'Häufigste Werte:');
+    for (const [w, n] of s.top) zeilen.push(`  ${ColumnTypes.formatCell(ci, w)}: ${n.toLocaleString('de-DE')}×`);
+  }
+  return zeilen.join('\n');
+}
+
+function openStatsModal(ci) {
+  if (!appState.headers.length) return;
+  const sichtbar = visibleCols().map(c => c.ci);
+  if (!sichtbar.length) { toast('Keine sichtbare Spalte.', 'error'); return; }
+  if (ci == null || !sichtbar.includes(ci)) ci = sichtbar.includes(appState.active.c) ? appState.active.c : sichtbar[0];
+  const sel = document.getElementById('stats-col');
+  sel.innerHTML = sichtbar.map(i => `<option value="${i}" ${i===ci?'selected':''}>${escapeHTML(appState.headers[i] || '')}</option>`).join('');
+  renderStatsBody(ci);
+  document.getElementById('stats-modal').classList.add('show');
+}
+function closeStatsModal() { document.getElementById('stats-modal').classList.remove('show'); }
+
+/* =============================================================
+   DUPLIKATE
+
+   Der Schlüssel einer Zeile sind die gewählten Spalten. Gearbeitet wird in
+   ANZEIGEREIHENFOLGE über die sichtbaren Zeilen: „erstes Vorkommen" ist damit
+   das, was der Nutzer oben sieht — auch bei aktiver Sortierung.
+   ============================================================= */
+function dupSchluessel(rIdx, cols, opts) {
+  const teile = [];
+  for (const ci of cols) {
+    let v = appState.rows[rIdx] ? String(appState.rows[rIdx][ci] ?? '') : '';
+    if (opts.trim) v = v.trim();
+    if (opts.ignoreCase) v = v.toLocaleLowerCase('de-DE');
+    teile.push(v);
+  }
+  return teile.join('\u0000');
+}
+
+/**
+ * Sucht Wiederholungen über die sichtbaren Zeilen.
+ * Liefert { gruppen, treffer, entfernen } — `entfernen` sind die Roh-Indizes der
+ * Zeilen, die bei „erstes/letztes behalten" wegfallen.
+ */
+function findDuplicates(cols, opts) {
+  const karte = new Map();
+  if (!cols.length) return { gruppen: 0, treffer: 0, entfernen: [] };
+  for (const r of appState.visibleIndices) {
+    const k = dupSchluessel(r, cols, opts);
+    const liste = karte.get(k);
+    if (liste) liste.push(r); else karte.set(k, [r]);
+  }
+  let gruppen = 0, treffer = 0;
+  const entfernen = [];
+  for (const liste of karte.values()) {
+    if (liste.length < 2) continue;
+    gruppen++; treffer += liste.length - 1;
+    const behalten = opts.keep === 'last' ? liste[liste.length - 1] : liste[0];
+    for (const r of liste) if (r !== behalten) entfernen.push(r);
+  }
+  return { gruppen, treffer, entfernen };
+}
+
+function dupOpts() {
+  return {
+    ignoreCase: document.getElementById('dup-case').checked,
+    trim: document.getElementById('dup-trim').checked,
+    keep: document.querySelector('input[name="dup-keep"]:checked').value,
+  };
+}
+function dupGewaehlteSpalten() {
+  return [...document.querySelectorAll('#dup-cols input:checked')].map(el => +el.value);
+}
+function updateDupInfo() {
+  const cols = dupGewaehlteSpalten();
+  const info = document.getElementById('dup-info');
+  const btn = document.getElementById('dup-remove');
+  if (!cols.length) {
+    info.textContent = 'Mindestens eine Spalte wählen.';
+    btn.disabled = true; return;
+  }
+  const r = findDuplicates(cols, dupOpts());
+  const n = appState.visibleIndices.length;
+  info.innerHTML = r.treffer
+    ? `<b>${r.treffer.toLocaleString('de-DE')}</b> von ${n.toLocaleString('de-DE')} sichtbaren Zeilen sind Wiederholungen, verteilt auf <b>${r.gruppen.toLocaleString('de-DE')}</b> Gruppe${r.gruppen===1?'':'n'}.`
+    : `Keine Duplikate in den ${n.toLocaleString('de-DE')} sichtbaren Zeilen.`;
+  btn.disabled = r.treffer === 0;
+}
+function openDupModal(vorauswahl) {
+  if (!appState.headers.length) return;
+  const sichtbar = visibleCols().map(c => c.ci);
+  const vor = new Set((vorauswahl && vorauswahl.length) ? vorauswahl : sichtbar);
+  document.getElementById('dup-cols').innerHTML = sichtbar.map(ci =>
+    `<label><input type="checkbox" value="${ci}" ${vor.has(ci)?'checked':''}/> ${escapeHTML(appState.headers[ci] || '')}</label>`).join('');
+  document.getElementById('dup-modal').classList.add('show');
+  updateDupInfo();
+}
+function closeDupModal() { document.getElementById('dup-modal').classList.remove('show'); }
+
+/** Entfernt die Wiederholungen als EIN Undo-Schritt. */
+function removeDuplicates() {
+  const cols = dupGewaehlteSpalten();
+  if (!cols.length) return;
+  const { treffer, entfernen } = findDuplicates(cols, dupOpts());
+  if (!treffer) { toast('Keine Duplikate gefunden.'); return; }
+  const indices = entfernen.slice().sort((a, b) => a - b);
+  const backup = indices.map(i => appState.rows[i].slice());
+  pushHistory({ label: `${indices.length} Duplikat(e) entfernen`, type:'delRows', indices, rowsBackup: backup });
+  applyForward({ type:'delRows', indices });
+  appState.selection = null;
+  rebuildVisible(); renderAll();
+  closeDupModal();
+  toast(`${indices.length.toLocaleString('de-DE')} doppelte Zeile(n) entfernt.`, 'success');
+}
+
+/* =============================================================
    OPTIONS MENU
    ============================================================= */
 function showOptsMenu() {
@@ -2960,6 +3377,10 @@ function showOptsMenu() {
     <div class="it" id="opts-show-all" ${appState.cols.some(c=>c.hidden)?'':'style="opacity:.5;pointer-events:none"'}>Alle Spalten einblenden</div>
     <div class="it" id="opts-unpin" ${appState.cols.some(c=>c.pinned)?'':'style="opacity:.5;pointer-events:none"'}>Alle Fixierungen aufheben</div>
     <div class="it" id="opts-redetect" ${appState.headers.length?'':'style="opacity:.5;pointer-events:none"'}>Spaltentypen neu erkennen</div>
+    <div class="divider"></div>
+    <div class="it" id="opts-stats" ${appState.headers.length?'':'style="opacity:.5;pointer-events:none"'}>Spaltenstatistik…<span class="sc">Strg+\u21E7+I</span></div>
+    <div class="it" id="opts-dup" ${appState.headers.length?'':'style="opacity:.5;pointer-events:none"'}>Duplikate…<span class="sc">Strg+\u21E7+D</span></div>
+    <div class="divider"></div>
     <div class="it danger" id="opts-clear-filters" ${hasAnyColFilter()?'':'style="opacity:.5;pointer-events:none"'}>Alle Filter zurücksetzen</div>
   `;
   host.appendChild(menu);
@@ -2972,6 +3393,8 @@ function showOptsMenu() {
   menu.querySelector('#opts-show-all').addEventListener('click', () => { showAllColumns(); host.innerHTML=''; });
   menu.querySelector('#opts-unpin').addEventListener('click', () => { unpinAllColumns(); host.innerHTML=''; });
   menu.querySelector('#opts-redetect').addEventListener('click', () => { redetectTypes(); host.innerHTML=''; });
+  menu.querySelector('#opts-stats').addEventListener('click', () => { host.innerHTML=''; openStatsModal(null); });
+  menu.querySelector('#opts-dup').addEventListener('click', () => { host.innerHTML=''; openDupModal(appState.selection?.type === 'cols' ? selectedVisibleCols() : null); });
   menu.querySelector('#opts-clear-filters').addEventListener('click', () => { clearAllFilters(); host.innerHTML=''; });
   setTimeout(() => document.addEventListener('mousedown', onDocOpts), 0);
 }
@@ -3039,8 +3462,10 @@ window.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'j') { e.preventDefault(); if (appState.headers.length) copyJira(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); document.getElementById('search-input').focus(); document.getElementById('search-input').select(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') { e.preventDefault(); if (appState.headers.length) openSRModal(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'i') { e.preventDefault(); if (appState.headers.length) openStatsModal(appState.selection?.type === 'cols' ? selectedVisibleCols()[0] : null); return; }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') { e.preventDefault(); if (appState.headers.length) openDupModal(appState.selection?.type === 'cols' ? selectedVisibleCols() : null); return; }
   if (e.key === '?' || (e.shiftKey && e.key === '?')) { e.preventDefault(); document.getElementById('help-modal').classList.add('show'); return; }
-  if (e.key === 'Escape') { hideFilterPopup(); hideContextMenu(); document.getElementById('help-modal').classList.remove('show'); }
+  if (e.key === 'Escape') { hideFilterPopup(); hideContextMenu(); document.getElementById('help-modal').classList.remove('show'); closeStatsModal(); closeDupModal(); }
   if (!appState.selection) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); doCopy(false); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') { e.preventDefault(); doCopy(true); }
@@ -3093,6 +3518,20 @@ document.getElementById('btn-clear-filters').addEventListener('click', clearAllF
 document.getElementById('btn-help').addEventListener('click', () => document.getElementById('help-modal').classList.add('show'));
 document.getElementById('help-close').addEventListener('click', () => document.getElementById('help-modal').classList.remove('show'));
 document.getElementById('help-modal').addEventListener('click', e => { if (e.target.id === 'help-modal') e.currentTarget.classList.remove('show'); });
+document.getElementById('stats-close').addEventListener('click', closeStatsModal);
+document.getElementById('stats-modal').addEventListener('click', e => { if (e.target.id === 'stats-modal') closeStatsModal(); });
+document.getElementById('stats-col').addEventListener('change', e => renderStatsBody(+e.target.value));
+document.getElementById('stats-copy').addEventListener('click', async () => {
+  const ci = +document.getElementById('stats-col').value;
+  const ok = await copyToSys(statsAlsText(ci));
+  toast(ok ? 'Statistik kopiert.' : 'Kopieren nicht möglich.', ok ? 'success' : 'error');
+});
+document.getElementById('dup-close').addEventListener('click', closeDupModal);
+document.getElementById('dup-modal').addEventListener('click', e => { if (e.target.id === 'dup-modal') closeDupModal(); });
+document.getElementById('dup-remove').addEventListener('click', removeDuplicates);
+document.getElementById('dup-cols').addEventListener('change', updateDupInfo);
+['dup-case','dup-trim'].forEach(id => document.getElementById(id).addEventListener('change', updateDupInfo));
+document.querySelectorAll('input[name="dup-keep"]').forEach(el => el.addEventListener('change', updateDupInfo));
 document.getElementById('btn-theme').addEventListener('click', () => { const cur = document.documentElement.getAttribute('data-theme') || 'light'; applyTheme(cur === 'dark' ? 'light' : 'dark'); });
 document.getElementById('stat-filters').addEventListener('click', clearAllFilters);
 

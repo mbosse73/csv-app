@@ -1,6 +1,6 @@
 # CSV-Tool — Spezifikation
 
-**Version:** V0.7
+**Version:** V0.8
 **Stand:** 2026-08-11
 **Architektur:** Single-File HTML/CSS/JS, offline, ohne Build-Schritt, ohne externe Abhängigkeiten
 
@@ -8,7 +8,7 @@
 
 ## 1. Zweck
 
-Browserbasierter CSV-Betrachter und -Editor für mittlere bis sehr große Dateien (500.000+ Zeilen). Bedienung Excel-nah: tastatur- und mausfreundlich, mit Undo/Redo, virtuellem Scrollen, Spaltentyp-Erkennung, Pro-Spalte-Filtern, Ansichts-Steuerung (Gruppierung, Einfrieren, Zeilenhöhe), Suchen & Ersetzen und 8 Export-Formaten.
+Browserbasierter CSV-Betrachter und -Editor für mittlere bis sehr große Dateien (500.000+ Zeilen). Bedienung Excel-nah: tastatur- und mausfreundlich, mit Undo/Redo, virtuellem Scrollen, Spaltentyp-Erkennung, Pro-Spalte-Filtern, Ansichts-Steuerung (Gruppierung, Einfrieren, Zeilenhöhe), Suchen & Ersetzen, Spaltenstatistik, Duplikat-Erkennung und 8 Export-Formaten.
 
 ## 2. Versionsübersicht
 
@@ -87,7 +87,68 @@ statt O(n), Wertefilter nutzen ein `Set` statt `Array.includes`, und Zell-Ereign
 
 ---
 
-## 3. Datenmodell (V0.6.1)
+### V0.7 — Auswahl in Anzeigepositionen
+
+Umbau des Auswahlmodells: `selection` speichert keine Roh-Indizes mehr, sondern Positionen in
+`viewRows` und `visibleCols()`. Beseitigt die strukturelle Ursache hinter sechs Befunden
+(01–03, 16–19). Siehe Abschnitt 3 und `ANALYSE.md`, Abschnitt 3a.
+
+---
+
+### V0.8 — Spaltenformat, Statistik, Duplikate (NEU)
+
+#### 8.1 Anzeigeformat je Spalte
+
+Rechtsklick auf die Kopfzeile → **Format ▸**. Wirkt auf alle ausgewählten Spalten und ist
+**ein** Undo-Schritt (`batch` aus `colMeta`-Befehlen).
+
+| Format | `cols[].format` | Beispiel |
+|---|---|---|
+| Automatisch | `auto` | `1.234,5` |
+| Ohne Tausenderpunkt | `plain` | `1234,5` |
+| Währung Euro / Dollar | `eur` / `usd` | `1.234,50 €` |
+| Prozent (Anteil ×100) | `percent` | `0,15` → `15,0 %` |
+| Prozent (Wert unverändert) | `percent-raw` | `15` → `15,0 %` |
+
+Dazu **feste Nachkommastellen** (`cols[].decimalsFixed`, `0`–`6` oder `null`):
+
+- `null` (Vorgabe) — mindestens so viele Stellen wie die Spalte führt, höchstens `DECIMALS_MAX`.
+  Es wird **nie** gekürzt; das ist die Regel aus Befund 05 und gilt auch für Währungsformate.
+- fester Wert — genau diese Stellenzahl, es wird gerundet.
+
+Das Format ist reine Anzeige: CSV, TSV und XLSX exportieren weiterhin Rohwerte bzw. echte
+Zahlen. Markdown, HTML und Jira übernehmen es. Bereichsfilter arbeiten ebenfalls auf Rohwerten
+— eine Prozentspalte zeigt `15,2 %`, der Filter erwartet `0.152`.
+
+#### 8.2 Spaltenstatistik (`Strg+Shift+I`)
+
+Dialog mit Spaltenauswahl; erreichbar auch über Kontextmenü der Kopfzeile und das Optionen-Menü.
+Ausgewertet werden **nur die sichtbaren Zeilen**, damit die Kennzahlen zum gesetzten Filter passen.
+
+- immer: Typ, sichtbare Zeilen, gefüllt/leer mit Anteil, eindeutige Werte, die 5 häufigsten
+  Werte mit Balken
+- Zahl: Minimum, Maximum, Summe (Kahan-summiert), Mittelwert, Median, Standardabweichung
+  (Stichprobe, n−1) — alle in der Formatierung der Spalte
+- Datum: frühestes, spätestes, Spanne in Tagen
+- Text: kürzester und längster Wert in Zeichen
+- nicht lesbare Werte werden getrennt ausgewiesen statt stillschweigend übergangen
+
+„Kopieren" legt die Statistik als Text in die Zwischenablage.
+
+#### 8.3 Duplikat-Erkennung (`Strg+Shift+D`)
+
+Dialog mit Auswahl der Schlüsselspalten (vorbelegt aus der Spaltenauswahl), Optionen
+„Groß-/Kleinschreibung ignorieren" und „Leerraum am Rand ignorieren" sowie der Wahl, ob das
+**erste** oder **letzte** Vorkommen bleibt. Der Dialog zeigt laufend, wie viele Zeilen
+Wiederholungen sind und auf wie viele Gruppen sie sich verteilen.
+
+Gearbeitet wird über die sichtbaren Zeilen in **Anzeigereihenfolge** — „erstes Vorkommen" ist
+das, was oben steht, auch bei aktiver Sortierung. Das Entfernen ist ein einziger
+`delRows`-Befehl und damit ein Undo-Schritt.
+
+---
+
+## 3. Datenmodell (V0.8)
 
 ```js
 appState = {
@@ -110,7 +171,9 @@ appState = {
     width, hidden, pinned,
     type: 'auto'|'text'|'number'|'date',
     detectedType: 'text'|'number'|'date',
-    decimals: Number,              // NEU: Nachkommastellen der Spalte (0..6)
+    decimals: Number,              // aus den Daten abgeleitete Nachkommastellen (0..6)
+    format: 'auto'|'plain'|'eur'|'usd'|'percent'|'percent-raw',  // NEU (V0.8)
+    decimalsFixed: Number | null,  // NEU (V0.8): feste Stellenzahl, null = automatisch
     filter: null | { kind:'values', excluded: String[] } | { kind:'range', min, max }
   }],
   selection: { type, v1, k1, v2, k2, anchorV, anchorK },  // V0.7: Anzeigepositionen
@@ -145,7 +208,7 @@ Undo-Schritt.
 
 ---
 
-## 4. Tastenkürzel (V0.6)
+## 4. Tastenkürzel (V0.8)
 
 | Aktion | Kürzel |
 |---|---|
@@ -162,6 +225,9 @@ Undo-Schritt.
 | Navigation / Auswahl erweitern | Pfeile / `Tab` / `Enter` (+ `Shift`) |
 | Anfang / Ende der Tabelle | `Strg+Home` / `Strg+End` |
 | Seitenweise scrollen | `PageUp` / `PageDown` |
+| **Spaltenstatistik** | **`Strg+Shift+I`** (NEU) |
+| **Duplikate suchen und entfernen** | **`Strg+Shift+D`** (NEU) |
+| Anzeigeformat der Spalte | Rechtsklick auf Kopfzeile → Format |
 | Hilfe öffnen | `?` |
 
 ---
@@ -181,7 +247,8 @@ Undo-Schritt.
 Alle Exporte respektieren den aktuell sichtbaren Zustand (Filter, Sortierung, Spaltenreihenfolge, ausgeblendete Spalten, Gruppierung / Einfrieren beeinflusst den Export nicht — es werden immer alle sichtbaren Datenzeilen exportiert, ohne Group-Header).
 
 **Kein verlustfreier Roundtrip:** Markdown, HTML und Jira exportieren die *Anzeigeform*
-(`formatValue`), also mit deutscher Zahlenformatierung und den Nachkommastellen der Spalte.
+(`ColumnTypes.formatWith`), also mit deutscher Zahlenformatierung, den Nachkommastellen der
+Spalte und dem eingestellten Spaltenformat (Währung, Prozent, feste Stellen).
 CSV, TSV und XLSX exportieren die Rohwerte bzw. echte Zahlen.
 
 ---
@@ -202,16 +269,17 @@ TYPE_DETECT_THRESHOLD= 0.8
 FILTER_LIST_MAX      = 2000
 FROZEN_ROWS_MAX      = 20
 DECIMALS_MAX         = 6
+STATS_TOP_N          = 5     // häufigste Werte im Statistik-Dialog
 ```
 
 ---
 
 ## 7. Roadmap
 
+- ~~**Spaltenstatistik-Panel**~~ — umgesetzt in V0.8
+- ~~**Duplikat-Erkennung** und -Entfernung~~ — umgesetzt in V0.8
 - **Multi-Column-Sortierung** (Excel-Style Prioritäten)
-- **Spaltenstatistik-Panel** (Min/Max/Median/Unique/Histogramm)
-- **Duplikat-Erkennung** und -Entfernung
-- **Bedingte Formatierung** pro Spalte
+- **Bedingte Formatierung** pro Spalte — baut auf `cols[].format` aus V0.8 auf
 - **Diagramm-Ansicht**
 - **XLSX-Import** (analog zum XLSX-Export)
 - **Encoding-Auswahl** beim Import (ISO-8859-1)
