@@ -1,7 +1,7 @@
 # CSV-Tool — Spezifikation
 
-**Version:** V0.6
-**Stand:** 2026-06-27
+**Version:** V0.6.1
+**Stand:** 2026-08-11
 **Architektur:** Single-File HTML/CSS/JS, offline, ohne Build-Schritt, ohne externe Abhängigkeiten
 
 ---
@@ -64,11 +64,34 @@ Browserbasierter CSV-Betrachter und -Editor für mittlere bis sehr große Dateie
 
 ---
 
-## 3. Datenmodell (V0.6)
+### V0.6.1 — Fehlerbehebungen (NEU)
+
+Behebt die 14 Befunde aus `ANALYSE.md`. Verhaltensrelevant sind:
+
+| Bereich | Vorher | Jetzt |
+|---|---|---|
+| `Entf`, Live-Summe, `Strg+A` | wirkten auf den Roh-Indexbereich `r1..r2` | wirken nur auf sichtbare Zeilen und eingeblendete Spalten (`selectedVisibleRows()` / `selectedVisibleCols()`) |
+| Zahlenanzeige | `1299.90` → `1.299,9` | `1.299,90` — Nachkommastellen je Spalte (`cols[].decimals`) |
+| Suchfeld | filterte die Tabelle | **markiert** Treffer; Ausblenden über den Schalter „Nur Treffer" |
+| Trennzeichen / Kopfzeile | „wirkt beim nächsten Öffnen" | liest die Datei sofort neu ein (`reparse()`, Rohtext wird gehalten) |
+| Drag & Drop | nur im Leerzustand | jederzeit, mit Overlay-Dropzone |
+| Sammelaktionen | mehrere Undo-Schritte | ein Schritt (neuer Befehlstyp `batch`) |
+| „Ganze Zelle" + Regex | Anker wurden ignoriert | Muster wird als `^(?:…)$` verankert |
+| JSON-Export | doppelte Spaltennamen überschrieben sich | eindeutige Namen (`A`, `A_2`) plus Hinweis-Toast |
+| `parseNumber('1.234.567')` | `1.234` | `1234567` (einzelnes `1.234` bleibt bewusst mehrdeutig) |
+
+Nicht verhaltensrelevant, aber spürbar: Tastaturnavigation ist über eine Index-Karte O(1)
+statt O(n), Wertefilter nutzen ein `Set` statt `Array.includes`, und Zell-Ereignisse laufen
+über Delegation statt über eine Neubindung pro Frame.
+
+---
+
+## 3. Datenmodell (V0.6.1)
 
 ```js
 appState = {
   fileName, fileSize,
+  rawText: String,                 // NEU: Rohtext für reparse()
   headers: String[],
   rows: String[][],
   delimiter, detectedDelimiter, hasHeader,
@@ -86,9 +109,11 @@ appState = {
     width, hidden, pinned,
     type: 'auto'|'text'|'number'|'date',
     detectedType: 'text'|'number'|'date',
-    filter: null | { kind:'values', excluded } | { kind:'range', min, max }
+    decimals: Number,              // NEU: Nachkommastellen der Spalte (0..6)
+    filter: null | { kind:'values', excluded: String[] } | { kind:'range', min, max }
   }],
-  selection, active, clipboard, search,
+  selection, active, clipboard,
+  search: { hits, current, query, onlyHits },   // onlyHits NEU
   history: { past:Command[], future:Command[] },
   frozenRows: Number,              // NEU: 0..20
   groupBy: Number | null,          // NEU: Spaltenindex
@@ -99,6 +124,19 @@ appState = {
 
 `viewRows` ist die kanonische Struktur für Rendering und Tastaturnavigation. `visibleIndices` bleibt die Wahrheit für Filter/Sortierung und wird beim Rendern durch `buildViewRows()` in `viewRows` überführt.
 
+`filter.excluded` ist ein **Array**, damit die Historie es serialisieren kann; für die
+Auswertung hält `excludedSet()` pro Filterobjekt ein `Set` in einer `WeakMap` vor.
+Filterobjekte werden nie mutiert, sondern ersetzt.
+
+**Auswahl:** `selection` ist ein Rechteck über *Roh-Indizes*. Jede auswertende Stelle muss
+`selectedVisibleRows()` bzw. `selectedVisibleCols()` benutzen — direkt über `r1..r2` zu
+iterieren greift auf ausgefilterte Zeilen zu, die der Nutzer nicht sieht.
+
+**Befehlstypen der Historie:** `batch`, `editCells`, `addRows`, `delRows`, `moveRow`,
+`addCol`, `delCols`, `moveCol`, `renameHeader`, `colMeta`, `colFilter`. `batch` bündelt
+Teilbefehle; `applyInverse` arbeitet sie rückwärts ab. Eine Nutzeraktion ist genau ein
+Undo-Schritt.
+
 ---
 
 ## 4. Tastenkürzel (V0.6)
@@ -107,7 +145,8 @@ appState = {
 |---|---|
 | Datei öffnen / Schnell-Export CSV | `Strg+O` / `Strg+S` |
 | **Suchen & Ersetzen** | **`Strg+H`** (NEU) |
-| Suchen | `Strg+F` |
+| Suchen (markiert Treffer) | `Strg+F` |
+| Nur Zeilen mit Treffern zeigen | Schalter „Nur Treffer" im Suchfeld |
 | Markdown / Jira in Zwischenablage | `Strg+Shift+M` / `Strg+Shift+J` |
 | Rückgängig / Wiederherstellen | `Strg+Z` / `Strg+Y` |
 | Kopieren / Ausschneiden / Einfügen | `Strg+C` / `Strg+X` / `Strg+V` |
@@ -129,11 +168,15 @@ appState = {
 | TSV | ✓ (.tsv, UTF-8 BOM) | – | – | Excel-kompatibel |
 | Markdown | ✓ (.md) | ✓ `Strg+Shift+M` | ✓ (Ausrichtung) | GFM |
 | Jira / Confluence | ✓ (.jira.txt) | ✓ `Strg+Shift+J` | – | Wiki-Markup |
-| JSON | ✓ (.json) | – | ✓ (Zahlen, Datum) | Array of Objects |
+| JSON | ✓ (.json) | – | ✓ (Zahlen, Datum) | Array of Objects; doppelte Spaltennamen werden eindeutig (`A`, `A_2`) |
 | HTML | ✓ (.html) | – | ✓ (Ausrichtung) | Vollständiges Dokument |
 | Excel | ✓ (.xlsx) | – | ✓ (`n`/`d`) | Eigener ZIP-Writer |
 
 Alle Exporte respektieren den aktuell sichtbaren Zustand (Filter, Sortierung, Spaltenreihenfolge, ausgeblendete Spalten, Gruppierung / Einfrieren beeinflusst den Export nicht — es werden immer alle sichtbaren Datenzeilen exportiert, ohne Group-Header).
+
+**Kein verlustfreier Roundtrip:** Markdown, HTML und Jira exportieren die *Anzeigeform*
+(`formatValue`), also mit deutscher Zahlenformatierung und den Nachkommastellen der Spalte.
+CSV, TSV und XLSX exportieren die Rohwerte bzw. echte Zahlen.
 
 ---
 
@@ -152,6 +195,7 @@ TYPE_DETECT_SAMPLE   = 200
 TYPE_DETECT_THRESHOLD= 0.8
 FILTER_LIST_MAX      = 2000
 FROZEN_ROWS_MAX      = 20
+DECIMALS_MAX         = 6
 ```
 
 ---

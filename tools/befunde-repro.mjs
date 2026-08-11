@@ -6,8 +6,8 @@
  *
  *   node tools/befunde-repro.mjs
  *
- * Erwartung im aktuellen Stand: die Befunde 01-13 schlagen fehl (FAIL).
- * Wer einen Befund behebt, sollte die zugehörige Zeile auf OK drehen sehen.
+ * Die Befunde 01-13 sind behoben; alle Zeilen müssen OK zeigen. Wer die Datei
+ * ändert und hier ein FAIL sieht, hat einen der Befunde wieder eingebaut.
  */
 
 import { openApp } from './app-harness.mjs';
@@ -59,14 +59,22 @@ const { page, fehler: jsErrors, close } = await openApp();
 /* ---------- 03 Strg+A wählt ein Rechteck ---------- */
 {
   const r = await page.evaluate(() => {
-    const vis = appState.visibleIndices;
-    setSelection('cells', vis[0], 0, vis[vis.length - 1], appState.headers.length - 1, vis[0], 0);
+    const rows = [];
+    for (let i = 1; i <= 9; i++) rows.push(`N${i},${i % 2 ? 'A' : 'B'}`);
+    loadCSVText('Name,Gruppe\n' + rows.join('\n'), 'a.csv', 0);
+    appState.cols[1].filter = { kind: 'values', excluded: ['B'] };
+    rebuildVisible();
+    selectAllVisible();            // genau das, was der Strg+A-Handler aufruft
     updateStatus();
-    const s = normalizedSel();
-    return { rechteck: s.r2 - s.r1 + 1, sichtbar: vis.length, label: document.getElementById('stat-sel').textContent };
+    return {
+      gewaehlt: selectedVisibleRows().length,
+      sichtbar: appState.visibleIndices.length,
+      gesamt: appState.rows.length,
+      label: document.getElementById('stat-sel').textContent,
+    };
   });
-  check('03', 'Strg+A umfasst nur sichtbare Zeilen', r.rechteck === r.sichtbar,
-    `Rechteck=${r.rechteck} Zeilen, sichtbar=${r.sichtbar}, Status="${r.label}"`);
+  check('03', 'Strg+A umfasst nur sichtbare Zeilen', r.gewaehlt === r.sichtbar && r.sichtbar < r.gesamt,
+    `${r.gewaehlt} Zeilen gewählt, ${r.sichtbar} sichtbar von ${r.gesamt} · Status="${r.label}"`);
 }
 
 /* ---------- 04 Virtuelles Scrollen mit eingefrorenen Zeilen ---------- */
@@ -95,10 +103,9 @@ const { page, fehler: jsErrors, close } = await openApp();
 {
   const r = await page.evaluate(() => {
     loadCSVText('Artikel,Preis\nLaptop,1299.90\nMaus,24.50\nKabel,79.00', 'p.csv', 0);
-    const t = ColumnTypes.effectiveType(1);
     return {
       roh: appState.rows.map(x => x[1]).join(' / '),
-      anzeige: appState.rows.map(x => ColumnTypes.formatValue(x[1], t)).join(' / '),
+      anzeige: appState.rows.map(x => ColumnTypes.formatCell(1, x[1])).join(' / '),
     };
   });
   const stellenErhalten = r.anzeige.split(' / ').every(v => /,\d\d$/.test(v));
@@ -196,13 +203,17 @@ const { page, fehler: jsErrors, close } = await openApp();
 
 /* ---------- 11 Zweite Datei per Drag & Drop ---------- */
 {
-  const r = await page.evaluate(() => {
+  const r = await page.evaluate(async () => {
     loadCSVText('A\n1', 'erste.csv', 0);
-    // Der window-drop-Handler steigt aus, sobald der Leerzustand ausgeblendet ist
-    return { emptyState: document.getElementById('empty-state').style.display };
+    // Echtes Drop-Ereignis auf dem Fenster, wie beim Ziehen aus dem Dateimanager
+    const dt = new DataTransfer();
+    dt.items.add(new File(['B\n2\n3\n4'], 'zweite.csv', { type: 'text/csv' }));
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    await new Promise(res => setTimeout(res, 400));
+    return { datei: appState.fileName, zeilen: appState.rows.length };
   });
-  check('11', 'Drag & Drop nimmt auch eine zweite Datei an', r.emptyState !== 'none',
-    `window-drop bricht ab, solange empty-state display="${r.emptyState}" ist`);
+  check('11', 'Drag & Drop nimmt auch eine zweite Datei an', r.datei === 'zweite.csv' && r.zeilen === 3,
+    `nach dem Ablegen geladen: „${r.datei}" mit ${r.zeilen} Zeilen`);
 }
 
 /* ---------- 12 Trennzeichen nachträglich ändern ---------- */
@@ -253,6 +264,71 @@ const { page, fehler: jsErrors, close } = await openApp();
     return !window.__pwned;
   });
   check('––', 'Zellinhalte werden HTML-escaped', xss, 'kein XSS über Zellwerte');
+
+  const batchUndo = await page.evaluate(() => {
+    loadCSVText('A,B,C\n1,2,3', 'b.csv', 0);
+    appState.cols[1].hidden = true; appState.cols[2].hidden = true;
+    appState.history = { past: [], future: [] };
+    showAllColumns();
+    const schritte = appState.history.past.length;
+    undo();
+    return { ok: schritte === 1 && appState.cols[1].hidden && appState.cols[2].hidden, schritte };
+  });
+  check('––', 'Ein Undo nimmt eine ganze Sammelaktion zurück', batchUndo.ok, `${batchUndo.schritte} Schritt(e)`);
+
+  const editor = await page.evaluate(async () => {
+    loadCSVText('A,B\n1,2\n3,4', 'e.csv', 0);
+    selectCell(0, 0);            // plant einen Frame ein
+    beginEditCell(1, 1);         // Editor darf davon nicht weggerendert werden
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return !!document.querySelector('.gcell.editing .editor');
+  });
+  check('––', 'Offener Zelleditor überlebt einen eingeplanten Render', editor, 'sonst schließt sich der Editor sofort wieder');
+
+  const listener = await page.evaluate(() => {
+    loadCSVText('A,B\n1,2\n3,4', 'l.csv', 0);
+    const host = document.getElementById('grid-rows');
+    let n = 0;
+    const orig = host.addEventListener.bind(host);
+    host.addEventListener = (...a) => { n++; return orig(...a); };
+    for (let i = 0; i < 30; i++) renderVirtual();
+    host.addEventListener = orig;
+    return n;
+  });
+  check('––', 'renderVirtual bindet keine Listener nach', listener === 0, `${listener} Bindungen bei 30 Durchläufen`);
+
+  const nurTreffer = await page.evaluate(() => {
+    loadCSVText('Name,Wert\nAlpha,1\nBeta,2\nGamma,3\nAlphaTier,4', 'n.csv', 0);
+    performSearch('Alpha');
+    const markiert = appState.visibleIndices.length;
+    toggleSearchOnlyHits();
+    const gefiltert = appState.visibleIndices.length;
+    toggleSearchOnlyHits();
+    return { markiert, gefiltert, zurueck: appState.visibleIndices.length };
+  });
+  check('––', '„Nur Treffer" blendet Nicht-Treffer aus und wieder ein',
+    nurTreffer.markiert === 4 && nurTreffer.gefiltert === 2 && nurTreffer.zurueck === 4,
+    `markiert=${nurTreffer.markiert} · nur Treffer=${nurTreffer.gefiltert} · zurück=${nurTreffer.zurueck}`);
+
+  const trenner = await page.evaluate(() => {
+    loadCSVText('A;B;C\n1;2;3', 'semi.csv', 0);
+    const auto = appState.headers.length;
+    appState.parserOpts.delimiter = ','; reparse();
+    const komma = appState.headers.length;
+    appState.parserOpts.delimiter = 'auto'; reparse();
+    return { auto, komma, zurueck: appState.headers.length };
+  });
+  check('––', 'Trennzeichenwechsel wirkt sofort', trenner.auto === 3 && trenner.komma === 1 && trenner.zurueck === 3,
+    `auto=${trenner.auto} Spalten · Komma=${trenner.komma} · zurück=${trenner.zurueck}`);
+
+  const zahlen = await page.evaluate(() => ({
+    gruppen: ColumnTypes.parseNumber('1.234.567'),
+    de: ColumnTypes.parseNumber('1.299,90'),
+    us: ColumnTypes.parseNumber('1,299.90'),
+  }));
+  check('––', 'Tausenderpunkte in Gruppen werden erkannt',
+    zahlen.gruppen === 1234567 && zahlen.de === 1299.9 && zahlen.us === 1299.9,
+    `1.234.567→${zahlen.gruppen} · 1.299,90→${zahlen.de} · 1,299.90→${zahlen.us}`);
 
   const autofill = await page.evaluate(() => {
     loadCSVText('Wert,Gruppe\n1,X\n99,Y\n2,X\n99,Y\n0,X\n0,X', 'a.csv', 0);

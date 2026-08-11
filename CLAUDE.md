@@ -51,20 +51,22 @@ Aufgebaut wird die Kette von `rebuildVisible()` → `buildViewRows()`. Nach **je
 
 > **Auswahlbereiche sind Rechtecke über Roh-Indizes (`r1..r2`), nicht Mengen sichtbarer Zeilen.**
 
-Wer die Auswahl auswertet, **muss** gegen `visibleIndices` schneiden — sonst werden ausgefilterte
-Zeilen mitgelesen oder mitgeschrieben. Richtig machen es `deleteSelectedRows`, `doCopy`,
-`commitAutoFill`; falsch machen es `clearSelectionValues` und `updateStatus`
-(→ Befunde 01–03 in `ANALYSE.md`). Muster:
+Wer die Auswahl auswertet, **muss** über die Hilfsfunktionen gehen — sonst werden ausgefilterte
+Zeilen oder ausgeblendete Spalten mitgelesen oder mitgeschrieben (→ Befunde 01–03 in `ANALYSE.md`):
 
 ```js
-const sel = normalizedSel();
-const rows = appState.visibleIndices.filter(r => r >= sel.r1 && r <= sel.r2);
+const sel  = normalizedSel();
+const rows = selectedVisibleRows(sel);   // schneidet gegen visibleIndices
+const cols = selectedVisibleCols(sel);   // lässt hidden-Spalten weg
 ```
+
+Niemals `for (let r = sel.r1; r <= sel.r2; r++)`. Das ist der Fehler, den dieses Projekt
+schon dreimal hatte.
 
 ### Zustandsänderungen laufen über die History
 
-Command-Pattern mit 11 Befehlstypen (`editCells`, `addRows`, `delRows`, `moveRow`, `addCol`,
-`delCols`, `moveCol`, `renameHeader`, `colMeta`, `colFilter`, …). Jede Mutation:
+Command-Pattern mit 11 Befehlstypen (`batch`, `editCells`, `addRows`, `delRows`, `moveRow`,
+`addCol`, `delCols`, `moveCol`, `renameHeader`, `colMeta`, `colFilter`). Jede Mutation:
 
 ```js
 pushHistory({ label: 'Beschreibung für den Toast', type: 'editCells', changes });
@@ -73,17 +75,31 @@ rebuildVisible(); renderAll();
 ```
 
 `applyForward` und `applyInverse` müssen **symmetrisch** bleiben — ein neuer Befehlstyp braucht
-immer beide Richtungen. Eine Nutzeraktion sollte ein einzelner Undo-Schritt sein; mehrere
-`pushHistory`-Aufrufe für eine Aktion sind ein Fehler (→ Befund 10).
+immer beide Richtungen. Eine Nutzeraktion ist **genau ein** Undo-Schritt; mehrere
+`pushHistory`-Aufrufe für eine Aktion sind ein Fehler. Für zusammengesetzte Aktionen gibt es
+`batch` (`applyInverse` arbeitet die Teilbefehle rückwärts ab):
+
+```js
+const cmds = [ {type:'colMeta', c:0, key:'hidden', from:true, to:false}, /* … */ ];
+pushHistory({ label:'…', type:'batch', cmds });
+applyForward({ type:'batch', cmds });
+```
 
 ### Rendering
 
-`renderVirtual()` erzeugt HTML als String, setzt `innerHTML` und bindet danach Listener neu.
-Gerendert wird ein Fenster über `viewRows` plus `VIRTUAL_OVERSCAN` Zeilen. Eingefrorene Zeilen
-liegen in einem eigenen sticky Container `#grid-frozen`, der Rest in `#grid-rows`.
+`renderVirtual()` erzeugt HTML als String und setzt `innerHTML`. Gerendert wird ein Fenster über
+`viewRows` plus `VIRTUAL_OVERSCAN` Zeilen. Eingefrorene Zeilen liegen in einem eigenen sticky
+Container `#grid-frozen`, der Rest in `#grid-rows`.
 
-Achtung: `ROW_H` ist eine **Variable**, keine Konstante — sie wird von `applyRowHeight()` gesetzt
-und in die CSS-Variable `--row-h` gespiegelt. Jede Layoutrechnung muss den aktuellen Wert lesen.
+- **Listener nicht pro Frame binden.** Zeilen- und Zell-Ereignisse laufen über Delegation
+  (`bindGridEvents()`, einmalig). Wer in `renderVirtual` etwas an einen Container hängt, baut
+  ein Leck: die Container überleben jeden Frame, die Listener summieren sich.
+- **`ROW_H` ist eine Variable**, keine Konstante — von `applyRowHeight()` gesetzt und in die
+  CSS-Variable `--row-h` gespiegelt. Jede Layoutrechnung muss den aktuellen Wert lesen.
+- **Kopfzeile und eingefrorener Block liegen sticky *über* dem Inhalt.** Beim Fenster-Ausschnitt
+  kürzen sich ihre Höhen weg: `floor(scrollTop / ROW_H)`, **nicht** `scrollTop - virtualOffsetTop`.
+- **Offener Zelleditor hat Vorrang.** `editingCell` blockiert `renderVirtual`, sonst löscht ein
+  eingeplanter Frame den gerade geöffneten Editor weg.
 
 ## Arbeiten und Prüfen
 
@@ -91,14 +107,15 @@ Es gibt kein Testframework. Geprüft wird, indem ein echter Browser die App fern
 legt ihren Zustand und ihre Funktionen global ab, deshalb genügt `page.evaluate()`.
 
 ```bash
-npm test                  # reproduziert alle Befunde aus ANALYSE.md (13 FAIL erwartet, 4 OK)
+npm test                  # 23 Prüfungen, alle müssen OK sein
 npm run shot              # Screenshot nach tools/out/app.png
 node tools/screenshot.mjs --theme dark --rows 5000 --frozen 20 --rowh 20 --scroll 20000
 ```
 
-**Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Wer einen Befund behebt, dreht die
-zugehörige Zeile von `FAIL` auf `OK` — das ist der Nachweis. Die vier Gegenproben am Ende
-(XLSX, Undo, XSS-Escaping, AutoFill) müssen grün bleiben.
+**Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Die Suite deckt die 14 behobenen
+Befunde plus Gegenproben ab (XLSX, Undo, `batch`-Undo, XSS-Escaping, AutoFill, Zelleditor,
+Listener-Anhäufung, Suche, Neu-Einlesen, Zahlenparser). Ein `FAIL` heißt: ein behobener Befund
+ist zurück. Neue Funktionen brauchen dort eine neue Prüfung.
 
 Für eine neue Prüfung: `.claude/skills/browser-repro/SKILL.md` enthält das Muster.
 Bei sichtbaren Änderungen zusätzlich einen Screenshot machen und anschauen.
@@ -108,15 +125,19 @@ Bei sichtbaren Änderungen zusätzlich einen Screenshot machen und anschauen.
 Images passen muss. Passt sie einmal nicht, weicht `tools/app-harness.mjs` automatisch auf das
 Binary unter `/opt/pw-browsers/chromium` aus — Tests laufen also auch nach einem Image-Wechsel.
 
-## Offene Befunde
+## Befunde und nächste Schritte
 
-`ANALYSE.md` beschreibt 14 verifizierte Befunde mit Fundstelle, Messwert und Lösungsansatz sowie
-priorisierte Weiterentwicklungsvorschläge. **Vor einer Änderung dort nachsehen** — vieles ist bereits
-analysiert. Die drei lohnendsten Einstiege:
+`ANALYSE.md` ist das Befundprotokoll: 15 Befunde mit Fundstelle, Messwert, Lösungsansatz und
+umgesetzter Lösung. **Alle sind behoben** (V0.6.1) — das Dokument bleibt als Begründung dafür
+erhalten, warum bestimmte Stellen so aussehen, wie sie aussehen. Abschnitt 4 listet die noch
+offenen Weiterentwicklungsvorschläge, die lohnendsten zuerst:
 
-1. Gemeinsame Hilfsfunktion `selectedVisibleRows()` → löst Befunde 01, 02 und 03 zusammen.
-2. Befehlstyp `batch` in der History → löst Befund 10 und ist Voraussetzung für Sammeloperationen.
-3. `Map<rIdx, viewRowIndex>` in `buildViewRows()` → macht die Navigation O(1) (Befund 07).
+1. **Spaltenstatistik-Panel** — mit dem vorhandenen Typsystem fast geschenkt, größter sichtbarer
+   Zugewinn pro Aufwand.
+2. **Anzeigeformat pro Spalte** (Währung, Prozent, feste Stellen) — `cols[].decimals` ist der
+   Anfang; das entschärft auch die `1.234`-Mehrdeutigkeit im Zahlenparser.
+3. **Streaming-Parser im Web Worker** — `readAsText` liest die ganze Datei in den Speicher und
+   das Parsen blockiert den Hauptthread.
 
 ## Dokumente pflegen
 
@@ -132,11 +153,16 @@ analysiert. Die drei lohnendsten Einstiege:
 
 - **`formatValue()` ist reine Anzeige.** CSV, TSV und XLSX exportieren Rohwerte bzw. echte Zahlen;
   Markdown, HTML und Jira benutzen `formatValue` und sind damit kein verlustfreier Roundtrip.
+  Für Zellen `ColumnTypes.formatCell(ci, v)` benutzen — das zieht Typ *und* `cols[ci].decimals`.
 - **Sortierung verändert `rows` nie** — nur `visibleIndices`. Wer mit `data-rix` aus dem DOM
-  arbeitet, hat einen Roh-Index in der Hand, keine Anzeigeposition.
+  arbeitet, hat einen Roh-Index in der Hand, keine Anzeigeposition. `visibleIndices` ist nach dem
+  Sortieren **nicht aufsteigend** — keine Binärsuche darauf.
 - **`appState.collapsedGroups` ist ein `Set`** und damit nicht JSON-serialisierbar. Relevant, sobald
   Sitzungspersistenz gebaut wird.
-- **Der Rohtext der Datei wird nach dem Parsen verworfen.** Deshalb wirken Trennzeichen- und
-  Kopfzeilen-Option erst beim nächsten Öffnen (Befund 12).
+- **Drei träge Caches.** `visibleSetCache` (in `rebuildVisible` verworfen), `viewIndexCache` (in
+  `buildViewRows` verworfen) und `excludedSetCache` (`WeakMap`, Schlüssel ist das Filterobjekt).
+  Deshalb gilt: **Filterobjekte nie mutieren, immer ersetzen.**
+- **`appState.rawText` hält die ganze Datei im Speicher** — Preis für `reparse()`. Wer den
+  Streaming-Parser baut, muss sich hier etwas überlegen.
 - **Zellinhalte immer durch `escapeHTML()`** schicken, Attributwerte durch `escapeAttr()`.
   Kein `innerHTML` mit ungeprüften Daten.
