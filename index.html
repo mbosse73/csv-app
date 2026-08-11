@@ -26,6 +26,7 @@
     --t-fast:.12s;
     --bg-group:#eef3fb; --bg-group-hover:#e0e9f7;
     --bg-frozen:#fbfaf5;
+    --bg-drop:rgba(47,111,235,.12);
   }
   [data-theme="dark"] {
     --bg-app:#0e1218; --bg-panel:#171c25; --bg-elevated:#1e2531;
@@ -43,6 +44,7 @@
     --shadow-lg:0 10px 30px rgba(0,0,0,.5);
     --bg-group:#1f2a3d; --bg-group-hover:#26334a;
     --bg-frozen:#1e2029;
+    --bg-drop:rgba(91,154,255,.16);
   }
   *,*::before,*::after { box-sizing:border-box; }
   html,body { margin:0; padding:0; height:100%; font-family:var(--sans); background:var(--bg-app); color:var(--text); font-size:13.5px; line-height:1.45; -webkit-font-smoothing:antialiased; }
@@ -69,14 +71,22 @@
   .tb-btn.danger { color:var(--danger); }
   .tb-btn svg { flex-shrink:0; }
   .tb-spacer { flex:1; }
-  .tb-search { position:relative; width:240px; height:28px; }
-  .tb-search input { width:100%; height:100%; padding:0 64px 0 28px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:5px; outline:none; font-size:13px; transition:border-color var(--t-fast), box-shadow var(--t-fast); color:inherit;}
+  .tb-search { position:relative; width:296px; height:28px; }
+  .tb-search input { width:100%; height:100%; padding:0 122px 0 28px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:5px; outline:none; font-size:13px; transition:border-color var(--t-fast), box-shadow var(--t-fast); color:inherit;}
   .tb-search input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
   .tb-search .ico { position:absolute; left:8px; top:50%; transform:translateY(-50%); color:var(--text-soft); pointer-events:none; }
   .tb-search .nav { position:absolute; right:4px; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:1px; color:var(--text-muted); font-size:11px; font-family:var(--mono); }
   .tb-search .nav button { background:transparent; border:none; color:var(--text-soft); padding:2px 4px; border-radius:3px; cursor:pointer; }
   .tb-search .nav button:hover { background:var(--bg-hover); color:var(--text); }
   .tb-search .nav .count { padding:0 4px; min-width:42px; text-align:center; }
+  .tb-search .nav .only-hits { font-family:var(--sans); font-size:10.5px; font-weight:500; padding:3px 6px; border:1px solid var(--border); }
+  .tb-search .nav .only-hits.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .tb-search .nav .only-hits.on:hover { background:var(--accent-hover); color:#fff; }
+
+  /* Dropzone-Overlay: nimmt auch dann Dateien an, wenn schon eine Tabelle offen ist */
+  .drop-overlay { position:fixed; inset:0; z-index:120; display:none; align-items:center; justify-content:center; background:var(--bg-drop); pointer-events:none; }
+  .drop-overlay.show { display:flex; }
+  .drop-overlay .box { padding:26px 44px; border:2px dashed var(--accent); border-radius:var(--radius-lg); background:var(--bg-panel); color:var(--text); font-weight:600; box-shadow:var(--shadow-lg); }
 
   /* Workspace */
   .workspace { display:grid; grid-template-rows:1fr auto; overflow:hidden; min-height:0; }
@@ -317,6 +327,7 @@
         <svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="search-input" placeholder="Suchen…" />
         <div class="nav" id="search-nav" style="display:none">
+          <button class="only-hits" id="search-only" title="Nur Zeilen mit Treffern anzeigen">Nur Treffer</button>
           <span class="count" id="search-count">0/0</span>
           <button id="search-prev" title="Vorheriger Treffer">▲</button>
           <button id="search-next" title="Nächster Treffer">▼</button>
@@ -375,6 +386,8 @@
   </div>
 </div>
 
+<div class="drop-overlay" id="drop-overlay"><div class="box">CSV-Datei hier ablegen</div></div>
+
 <div class="toast" id="toast"></div>
 <div id="ctx-menu-host"></div>
 <div id="opts-menu-host"></div>
@@ -417,12 +430,13 @@
       <span class="lbl">Suchen &amp; Ersetzen</span><span><kbd>Strg</kbd>+<kbd>H</kbd></span>
       <span class="lbl">Rückgängig / Wiederherstellen</span><span><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Y</kbd></span>
       <span class="lbl">Kopieren / Ausschneiden / Einfügen</span><span><kbd>Strg</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></span>
-      <span class="lbl">Alles auswählen</span><span><kbd>Strg</kbd>+<kbd>A</kbd></span>
+      <span class="lbl">Alles auswählen (nur sichtbare Zeilen)</span><span><kbd>Strg</kbd>+<kbd>A</kbd></span>
       <span class="lbl">Bearbeitung starten</span><span><kbd>F2</kbd> / <kbd>Enter</kbd> / Tippen</span>
       <span class="lbl">Auswahl leeren</span><span><kbd>Entf</kbd></span>
       <span class="lbl">Navigation</span><span>Pfeile / <kbd>Tab</kbd> / <kbd>Enter</kbd></span>
       <span class="lbl">Auswahl erweitern</span><span><kbd>Shift</kbd> + Pfeile</span>
       <span class="lbl">Anfang / Ende der Tabelle</span><span><kbd>Strg</kbd>+<kbd>Home</kbd> / <kbd>End</kbd></span>
+      <span class="lbl">Suche: nur Treffer anzeigen</span><span>Schalter „Nur Treffer" im Suchfeld</span>
       <span class="lbl">Filter-Popup öffnen</span><span>Klick auf Trichter-Icon im Header</span>
       <span class="lbl">Spaltentyp ändern</span><span>Spaltenmenü „▾" → Typ</span>
       <span class="lbl">Hilfe öffnen</span><span><kbd>?</kbd></span>
@@ -447,9 +461,12 @@ const VIRTUAL_OVERSCAN = 8;
 const TYPE_DETECT_SAMPLE = 200;
 const TYPE_DETECT_THRESHOLD = 0.8;
 const FILTER_LIST_MAX = 2000;
+const FROZEN_ROWS_MAX = 20;
+const DECIMALS_MAX = 6;
 
 const appState = {
   fileName:null, fileSize:0,
+  rawText:'',         // Rohtext der geladenen Datei — Voraussetzung für reparse()
   headers:[], rows:[],
   delimiter:',', detectedDelimiter:',', hasHeader:true,
   parserOpts:{ delimiter:'auto', header:'yes' },
@@ -461,7 +478,7 @@ const appState = {
   selection:null,
   active:{ r:0, c:0 },
   clipboard:null,
-  search:{ hits:[], current:-1 },
+  search:{ hits:[], current:-1, query:'', onlyHits:false },
   history:{ past:[], future:[] },
   frozenRows: 0,                        // Anzahl eingefrorener Zeilen von oben
   groupBy: null,                        // Spaltenindex oder null
@@ -495,13 +512,16 @@ function updateUndoUI() {
 
 function applyForward(cmd) {
   switch (cmd.type) {
+    // 'batch' bündelt mehrere Teilbefehle zu einem einzigen Undo-Schritt.
+    // applyInverse arbeitet sie in umgekehrter Reihenfolge ab.
+    case 'batch': for (const sub of cmd.cmds) applyForward(sub); break;
     case 'editCells': for (const ch of cmd.changes) appState.rows[ch.r][ch.c] = ch.to; break;
     case 'addRows': appState.rows.splice(cmd.at, 0, ...cmd.rowsData.map(r => r.slice())); break;
     case 'delRows': [...cmd.indices].sort((a,b)=>b-a).forEach(i => appState.rows.splice(i,1)); break;
     case 'moveRow': { const row = appState.rows.splice(cmd.from, 1)[0]; appState.rows.splice(cmd.to, 0, row); break; }
     case 'addCol':
       appState.headers.splice(cmd.at, 0, cmd.name);
-      appState.cols.splice(cmd.at, 0, { width:cmd.width, hidden:false, pinned:false, type:'auto', detectedType:'text', filter:null });
+      appState.cols.splice(cmd.at, 0, { width:cmd.width, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, filter:null });
       appState.rows.forEach(r => r.splice(cmd.at, 0, ''));
       break;
     case 'delCols': { const set = new Set(cmd.indices); appState.headers = appState.headers.filter((_,i)=>!set.has(i)); appState.cols = appState.cols.filter((_,i)=>!set.has(i)); appState.rows = appState.rows.map(r => r.filter((_,i)=>!set.has(i))); break; }
@@ -513,6 +533,7 @@ function applyForward(cmd) {
 }
 function applyInverse(cmd) {
   switch (cmd.type) {
+    case 'batch': for (let i = cmd.cmds.length - 1; i >= 0; i--) applyInverse(cmd.cmds[i]); break;
     case 'editCells': for (const ch of cmd.changes) appState.rows[ch.r][ch.c] = ch.from; break;
     case 'addRows': appState.rows.splice(cmd.at, cmd.rowsData.length); break;
     case 'delRows': { const sorted = cmd.indices.map((i,k)=>({i, data:cmd.rowsBackup[k]})).sort((a,b)=>a.i-b.i); for (const o of sorted) appState.rows.splice(o.i, 0, o.data.slice()); break; }
@@ -591,28 +612,51 @@ function matrixToTSV(m) {
 const ColumnTypes = (() => {
   // Date regex collection (common formats)
   // Returns parsed Date object or NaN
-  function parseNumber(v) {
-    if (v === '' || v == null) return NaN;
+  /**
+   * Normalisiert eine Zahl-Schreibweise auf JS-Syntax ("1234.56") oder gibt null zur\u00FCck.
+   * Erlaubt "1.234,56" (DE), "1,234.56" (US), "1234.56" und "1234,56".
+   * Strategie: Das *zuletzt* stehende Trennzeichen ist das Dezimaltrennzeichen.
+   * Bewusst mehrdeutig bleibt der Einzelfall "1.234" \u2014 ein einzelner Punkt mit drei
+   * Folgeziffern wird als Dezimaltrennzeichen gelesen (siehe ANALYSE.md, Befund 14).
+   */
+  function cleanNumber(v) {
+    if (v === '' || v == null) return null;
     const s = String(v).trim();
-    if (s === '') return NaN;
-    // Reject things like "12abc"
-    // Allow German format: "1.234,56" or US "1,234.56" or "1234.56" or "1234,56"
-    // Strategy: remove thousand separators based on which decimal is last
+    if (s === '') return null;
+    // Weist "12abc" ab
     let cleaned = s.replace(/[\s\u00A0\u202F]/g,'');
-    if (!/^[-+]?[\d.,]+([eE][-+]?\d+)?$/.test(cleaned)) return NaN;
+    if (!/^[-+]?[\d.,]+([eE][-+]?\d+)?$/.test(cleaned)) return null;
     const lastComma = cleaned.lastIndexOf(',');
     const lastDot = cleaned.lastIndexOf('.');
     if (lastComma !== -1 && lastDot !== -1) {
       if (lastComma > lastDot) cleaned = cleaned.replace(/\./g,'').replace(',', '.');
       else cleaned = cleaned.replace(/,/g,'');
     } else if (lastComma !== -1) {
-      // Only comma present. If 3 digits after, treat as thousands sep
+      // Nur Komma. Bei mehreren Gruppen \u00E0 3 Ziffern ist es ein Tausendertrennzeichen.
       const afterComma = cleaned.length - lastComma - 1;
       if (afterComma === 3 && cleaned.split(',').length > 2) cleaned = cleaned.replace(/,/g,'');
       else cleaned = cleaned.replace(',', '.');
+    } else if (lastDot !== -1) {
+      // Nur Punkt. Spiegelbildlich: "1.234.567" ist eindeutig ein Tausendertrennzeichen.
+      const afterDot = cleaned.length - lastDot - 1;
+      if (afterDot === 3 && cleaned.split('.').length > 2) cleaned = cleaned.replace(/\./g,'');
     }
+    return cleaned;
+  }
+  function parseNumber(v) {
+    const cleaned = cleanNumber(v);
+    if (cleaned === null) return NaN;
     const n = parseFloat(cleaned);
     return isNaN(n) ? NaN : n;
+  }
+  /** Nachkommastellen des Rohwerts \u2014 Grundlage f\u00FCr minimumFractionDigits. */
+  function decimalsOf(v) {
+    const cleaned = cleanNumber(v);
+    if (cleaned === null) return 0;
+    const i = cleaned.indexOf('.');
+    if (i < 0) return 0;
+    const rest = cleaned.slice(i + 1).replace(/[eE].*$/, '');
+    return Math.min(DECIMALS_MAX, rest.length);
   }
   function parseDate(v) {
     if (v === '' || v == null) return NaN;
@@ -657,24 +701,38 @@ const ColumnTypes = (() => {
       for (let r = 0; r < lim; r++) vals.push(appState.rows[r][c]);
       const t = detectType(vals);
       appState.cols[c].detectedType = t;
-      if (!appState.cols[c].type || appState.cols[c].type === 'auto') {
-        // keep 'auto', effective type comes from detected
-      }
+      // Nachkommastellen der Spalte: das Maximum der Stichprobe. Wird unabhängig vom
+      // erkannten Typ ermittelt, damit auch ein manuell auf „Zahl" gesetzter Spaltentyp
+      // sinnvoll formatiert wird.
+      let dec = 0;
+      for (const v of vals) { const d = decimalsOf(v); if (d > dec) dec = d; }
+      appState.cols[c].decimals = dec;
     }
   }
+  function decimalsFor(ci) {
+    const meta = appState.cols[ci];
+    return meta && typeof meta.decimals === 'number' ? meta.decimals : 0;
+  }
+  /** Anzeigeformat einer Zelle inklusive Spaltentyp und Spalten-Nachkommastellen. */
+  function formatCell(ci, v) { return formatValue(v, effectiveType(ci), decimalsFor(ci)); }
   function effectiveType(c) {
     const meta = appState.cols[c];
     if (!meta) return 'text';
     if (meta.type && meta.type !== 'auto') return meta.type;
     return meta.detectedType || 'text';
   }
-  function formatValue(v, type) {
+  /**
+   * Anzeigeformat eines Rohwerts. `decimals` gibt die Nachkommastellen der Spalte vor;
+   * ohne Angabe werden die des Werts selbst benutzt, damit "1299.90" nicht als
+   * "1.299,9" erscheint. Mehr Stellen als vorgegeben werden nie abgeschnitten.
+   */
+  function formatValue(v, type, decimals) {
     if (v === '' || v == null) return '';
     if (type === 'number') {
       const n = parseNumber(v);
       if (isNaN(n)) return String(v);
-      // Preserve at most 6 decimals, group thousands
-      return n.toLocaleString('de-DE', { maximumFractionDigits: 6 });
+      const d = Math.max(0, Math.min(DECIMALS_MAX, typeof decimals === 'number' ? decimals : decimalsOf(v)));
+      return n.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: DECIMALS_MAX });
     }
     if (type === 'date') {
       const t = parseDate(v);
@@ -712,7 +770,7 @@ const ColumnTypes = (() => {
     }
     return String(a).localeCompare(String(b), undefined, { numeric:true });
   }
-  return { parseNumber, parseDate, detectType, detectAll, effectiveType, formatValue, compare };
+  return { parseNumber, parseDate, decimalsOf, detectType, detectAll, effectiveType, decimalsFor, formatValue, formatCell, compare };
 })();
 
 /* =============================================================
@@ -730,7 +788,7 @@ async function loadFile(file) {
 }
 function yieldUI() { return new Promise(r => setTimeout(r, 0)); }
 
-function loadCSVText(text, fileName, fileSize) {
+function loadCSVText(text, fileName, fileSize, quiet=false) {
   const opt = appState.parserOpts.delimiter;
   let delim;
   if (opt === 'auto') delim = detectDelimiter(text);
@@ -743,12 +801,12 @@ function loadCSVText(text, fileName, fileSize) {
   appState.hasHeader = useHeader;
   if (useHeader) { appState.headers = parsed[0].map((h,i) => h.trim() || `Spalte ${i+1}`); appState.rows = parsed.slice(1); }
   else { appState.headers = parsed[0].map((_,i) => `Spalte ${i+1}`); appState.rows = parsed; }
-  appState.fileName = fileName; appState.fileSize = fileSize;
-  appState.cols = appState.headers.map(() => ({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', filter:null }));
+  appState.fileName = fileName; appState.fileSize = fileSize; appState.rawText = text;
+  appState.cols = appState.headers.map(() => ({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, filter:null }));
   appState.sort = { col:-1, dir:0 }; appState.filter = '';
   appState.selection = null; appState.active = { r:0, c:0 };
   appState.history = { past:[], future:[] };
-  appState.search = { hits:[], current:-1 };
+  appState.search = { hits:[], current:-1, query:'', onlyHits:false };
   appState.frozenRows = 0; appState.groupBy = null; appState.collapsedGroups = new Set();
   document.getElementById('search-input').value = '';
   document.getElementById('search-nav').style.display = 'none';
@@ -756,23 +814,55 @@ function loadCSVText(text, fileName, fileSize) {
   ColumnTypes.detectAll();
   rebuildVisible();
   renderAll();
-  toast(`„${fileName}" geladen (${appState.rows.length.toLocaleString('de-DE')} Zeilen)`, 'success');
+  if (!quiet) toast(`„${fileName}" geladen (${appState.rows.length.toLocaleString('de-DE')} Zeilen)`, 'success');
+}
+
+/**
+ * Liest den gehaltenen Rohtext mit den aktuellen Parser-Optionen erneut ein.
+ * Nötig, weil Trennzeichen und Kopfzeilen-Option erst beim Parsen wirken.
+ * Verwirft wie jedes Öffnen Auswahl, Filter und Historie.
+ */
+function reparse() {
+  if (!appState.rawText) { toast('Keine Datei zum Neueinlesen.', 'warn'); return false; }
+  loadCSVText(appState.rawText, appState.fileName, appState.fileSize, true);
+  toast(`Neu eingelesen: Trenner ${delimLabel(appState.delimiter)}, ${appState.rows.length.toLocaleString('de-DE')} Zeilen.`, 'success');
+  return true;
 }
 
 /* =============================================================
    FILTER (Volltext + Pro-Spalte) / SORT
    ============================================================= */
-function rowPassesColFilters(rIdx) {
+/**
+ * `filter.excluded` bleibt ein Array, damit die History es weiterhin serialisieren kann.
+ * Für die Auswertung wird pro Filterobjekt ein Set vorgehalten — sonst kostet jede Zeile
+ * einen linearen Scan über alle abgewählten Werte (Befund 08).
+ * Filterobjekte werden nie mutiert, sondern ersetzt; die Identität ist damit ein
+ * belastbarer Cache-Schlüssel.
+ */
+const excludedSetCache = new WeakMap();
+function excludedSet(f) {
+  let s = excludedSetCache.get(f);
+  if (!s) { s = new Set(f.excluded || []); excludedSetCache.set(f, s); }
+  return s;
+}
+/** Vorberechnete Liste der Spalten mit aktivem Filter (Spalte, Filter, Typ). */
+function activeColFilters() {
+  const out = [];
   for (let c = 0; c < appState.cols.length; c++) {
     const f = appState.cols[c].filter;
-    if (!f) continue;
-    const v = appState.rows[rIdx][c] ?? '';
+    if (f) out.push({ c, f, type: ColumnTypes.effectiveType(c) });
+  }
+  return out;
+}
+function rowPassesColFilters(rIdx, active) {
+  const list = active || activeColFilters();
+  const row = appState.rows[rIdx];
+  for (const { c, f, type } of list) {
+    const v = row[c] ?? '';
     if (f.kind === 'values') {
-      // f.excluded: Set (Stringified value, with __EMPTY__ for empty)
       const key = v === '' ? '__EMPTY__' : String(v);
-      if (f.excluded && f.excluded.includes(key)) return false;
+      if (excludedSet(f).has(key)) return false;
     } else if (f.kind === 'range') {
-      const type = ColumnTypes.effectiveType(c);
       if (type === 'number') {
         if (v === '' && (f.min != null || f.max != null)) return false;
         const n = ColumnTypes.parseNumber(v);
@@ -798,14 +888,15 @@ function countActiveColFilters() {
 }
 function rebuildVisible() {
   const f = appState.filter.toLowerCase().trim();
-  const hasCol = hasAnyColFilter();
+  const active = activeColFilters();
+  const hasCol = active.length > 0;
   const idx = [];
   if (!f && !hasCol) {
     idx.length = appState.rows.length;
     for (let i=0; i<idx.length; i++) idx[i] = i;
   } else {
     for (let i=0; i<appState.rows.length; i++) {
-      if (hasCol && !rowPassesColFilters(i)) continue;
+      if (hasCol && !rowPassesColFilters(i, active)) continue;
       if (f) {
         const row = appState.rows[i];
         let hit = false;
@@ -821,10 +912,22 @@ function rebuildVisible() {
     idx.sort((a,b) => ColumnTypes.compare(appState.rows[a][c] ?? '', appState.rows[b][c] ?? '', type) * d);
   }
   appState.visibleIndices = idx;
+  visibleSetCache = null;
   buildViewRows();
 }
 
+/* Beide Caches werden träge aufgebaut: der Aufbau lohnt sich erst, wenn wirklich
+   nachgeschlagen wird, und würde rebuildVisible() sonst unnötig verlangsamen. */
+let visibleSetCache = null;   // Set<rIdx> — Zugehörigkeit zu visibleIndices in O(1)
+let viewIndexCache = null;    // Map<rIdx, viewRowIndex> — Position im Render-Plan in O(1)
+
+function isRowVisible(rIdx) {
+  if (!visibleSetCache) visibleSetCache = new Set(appState.visibleIndices);
+  return visibleSetCache.has(rIdx);
+}
+
 function buildViewRows() {
+  viewIndexCache = null;
   const gb = appState.groupBy;
   const vr = [];
   if (gb == null || gb < 0 || gb >= appState.headers.length) {
@@ -846,7 +949,7 @@ function buildViewRows() {
     if (key !== curKey) {
       curKey = key;
       const collapsed = appState.collapsedGroups.has(key);
-      groupBucket = { kind:'group', groupKey:key, groupCol:gb, display: raw === '' ? '(Leer)' : ColumnTypes.formatValue(raw, type), count:0, collapsed };
+      groupBucket = { kind:'group', groupKey:key, groupCol:gb, display: raw === '' ? '(Leer)' : ColumnTypes.formatCell(gb, raw), count:0, collapsed };
       vr.push(groupBucket);
     }
     groupBucket.count++;
@@ -855,8 +958,17 @@ function buildViewRows() {
   appState.viewRows = vr;
 }
 function findViewRowByData(rIdx) {
+  if (!viewIndexCache) {
+    const vr = appState.viewRows;
+    viewIndexCache = new Map();
+    for (let i=0; i<vr.length; i++) if (vr[i].kind === 'data') viewIndexCache.set(vr[i].rIdx, i);
+  }
+  const vk = viewIndexCache.get(rIdx);
+  return vk === undefined ? -1 : vk;
+}
+function firstDataViewRow() {
   const vr = appState.viewRows;
-  for (let i=0; i<vr.length; i++) if (vr[i].kind === 'data' && vr[i].rIdx === rIdx) return i;
+  for (let i=0; i<vr.length; i++) if (vr[i].kind === 'data') return i;
   return -1;
 }
 function nextDataViewRow(startVk, dir) {
@@ -877,6 +989,40 @@ function selectRow(ri) { setSelection('rows', ri, 0, ri, appState.headers.length
 function selectCol(ci) { setSelection('cols', 0, ci, Math.max(0, appState.rows.length-1), ci, 0, ci); appState.active = {r:0,c:ci}; updateSelectionDOM(); }
 function isCellSelected(r,c) { const s = normalizedSel(); if (!s) return false; if (appState.selection.type === 'rows') return r>=s.r1 && r<=s.r2; if (appState.selection.type === 'cols') return c>=s.c1 && c<=s.c2; return r>=s.r1 && r<=s.r2 && c>=s.c1 && c<=s.c2; }
 
+/* -------------------------------------------------------------
+   Auswahl auswerten
+
+   Auswahlbereiche sind Rechtecke über ROH-Indizes (r1..r2), nicht Mengen
+   sichtbarer Zeilen. Wer die Auswahl liest oder beschreibt, MUSS deshalb über
+   selectedVisibleRows() gehen — sonst greift die Aktion auf ausgefilterte
+   Zeilen zu, die der Nutzer gar nicht sieht (Befunde 01–03).
+   ------------------------------------------------------------- */
+function selectedVisibleRows(sel) {
+  const s = sel || normalizedSel();
+  if (!s) return [];
+  // Einzelzeile: kein Scan über visibleIndices nötig, der Set-Lookup genügt.
+  if (s.r1 === s.r2) return isRowVisible(s.r1) ? [s.r1] : [];
+  return appState.visibleIndices.filter(r => r >= s.r1 && r <= s.r2);
+}
+/** Sichtbare (nicht ausgeblendete) Spalten der Auswahl in Originalreihenfolge. */
+function selectedVisibleCols(sel) {
+  const s = sel || normalizedSel();
+  if (!s) return [];
+  const out = [];
+  for (let c = s.c1; c <= s.c2; c++) if (appState.cols[c] && !appState.cols[c].hidden) out.push(c);
+  return out;
+}
+/** Strg+A — die Hilfe verspricht „nur sichtbare Zeilen", also auch nur die. */
+function selectAllVisible() {
+  const vis = appState.visibleIndices;
+  if (!vis.length) return;
+  let first = vis[0], last = vis[0];
+  for (const r of vis) { if (r < first) first = r; if (r > last) last = r; }
+  setSelection('cells', first, 0, last, appState.headers.length-1, first, 0);
+  appState.active = { r:first, c:0 };
+  updateSelectionDOM();
+}
+
 /* =============================================================
    RENDER (Virtual scrolling)
    ============================================================= */
@@ -894,6 +1040,7 @@ function renderAll() {
   ['btn-export','btn-add-row','btn-add-col','btn-copy','btn-cut','btn-paste','btn-replace','btn-view'].forEach(id => document.getElementById(id).disabled = !hasData);
   document.getElementById('btn-clear-filters').disabled = !hasData || !hasAnyColFilter();
   if (!hasData) return;
+  bindGridEvents();
   renderHeader();
   setSizerHeight();
   renderVirtual();
@@ -948,12 +1095,12 @@ function renderHeader() {
 }
 
 function buildRowHTML(vk, viewRow, ctx) {
-  const { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, isFrozen } = ctx;
+  const { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, colDecimals } = ctx;
   if (viewRow.kind === 'group') {
     const caret = viewRow.collapsed ? '▶' : '▼';
     const colHeader = appState.headers[viewRow.groupCol] ?? '';
-    const top = isFrozen ? (vk * ROW_H) : (vk * ROW_H);
-    return `<div class="grid-row group-header" style="top:${top}px; width:${totalW}px" data-vk="${vk}" data-gk="${escapeAttr(viewRow.groupKey)}">
+    const top = vk * ROW_H;
+    return `<div class="grid-row group-header" style="top:${top}px; width:${totalW}px" data-gk="${escapeAttr(viewRow.groupKey)}">
       <div class="gcell row-idx" style="width:${ROW_IDX_W}px; left:0; position:sticky; z-index:4; background:var(--bg-group);"></div>
       <div class="gcell" style="border-right:none; position:sticky; left:${ROW_IDX_W}px;">
         <span class="gh-caret">${caret}</span>
@@ -968,13 +1115,13 @@ function buildRowHTML(vk, viewRow, ctx) {
   const top = vk * ROW_H;
   const rowSelected = sel && selType === 'rows' && ri >= sel.r1 && ri <= sel.r2;
   const altClass = vk % 2 === 1 ? 'alt' : '';
-  let html = `<div class="grid-row ${altClass} ${rowSelected?'row-selected':''}" style="top:${top}px; width:${totalW}px" data-row="${ri}" data-vk="${vk}">`;
+  let html = `<div class="grid-row ${altClass} ${rowSelected?'row-selected':''}" style="top:${top}px; width:${totalW}px" data-row="${ri}">`;
   html += `<div class="gcell row-idx" style="width:${ROW_IDX_W}px; left:0; position:sticky; z-index:4;" data-rix="${ri}" draggable="true" title="Klick: Zeile wählen · Ziehen: verschieben">${(ri+1).toLocaleString('de-DE')}</div>`;
   for (let ck = 0; ck < cols.length; ck++) {
     const { ci, width, pinned } = cols[ck];
     const t = colTypes[ck];
     const raw = row[ci] ?? '';
-    const display = ColumnTypes.formatValue(raw, t);
+    const display = ColumnTypes.formatValue(raw, t, colDecimals[ck]);
     let cls = `gcell t-${t}`;
     if (sel) {
       let isS = false;
@@ -1001,6 +1148,11 @@ function renderVirtual() {
   const rowsHost = document.getElementById('grid-rows');
   const frozenHost = document.getElementById('grid-frozen');
   if (!scroller || !rowsHost) return;
+  if (editingCell) {
+    // Offener Editor hat Vorrang; ein verwaistes Flag heilt sich hier selbst.
+    if (document.querySelector('.gcell.editing .editor')) return;
+    editingCell = null;
+  }
   const cols = visibleCols();
   const offs = pinOffsets(cols);
   const totalW = totalColWidth(cols);
@@ -1009,7 +1161,8 @@ function renderVirtual() {
   const searchCur = appState.search.current >= 0 ? appState.search.hits[appState.search.current] : null;
   const searchSet = new Set(appState.search.hits.map(h => h.r + ':' + h.c));
   const colTypes = cols.map(co => ColumnTypes.effectiveType(co.ci));
-  const ctx = { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes };
+  const colDecimals = cols.map(co => ColumnTypes.decimalsFor(co.ci));
+  const ctx = { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, colDecimals };
 
   const viewRows = appState.viewRows;
   const frozenN = Math.min(appState.frozenRows, viewRows.length);
@@ -1023,7 +1176,7 @@ function renderVirtual() {
     frozenHost.style.width = totalW + 'px';
     let fhtml = '';
     for (let k = 0; k < frozenN; k++) {
-      fhtml += buildRowHTML(k, viewRows[k], { ...ctx, isFrozen:true });
+      fhtml += buildRowHTML(k, viewRows[k], ctx);
     }
     frozenHost.innerHTML = fhtml;
   } else {
@@ -1043,8 +1196,13 @@ function renderVirtual() {
   rowsHost.style.height = (totalVirtualRows * ROW_H) + 'px';
   rowsHost.style.width = totalW + 'px';
 
-  const firstVisible = Math.max(0, Math.floor((scrollTop - virtualOffsetTop) / ROW_H) - VIRTUAL_OVERSCAN);
-  const lastVisible = Math.min(totalVirtualRows - 1, Math.ceil((scrollTop - virtualOffsetTop + viewportH) / ROW_H) + VIRTUAL_OVERSCAN);
+  // Kopfzeile und eingefrorener Block liegen sticky ÜBER dem Scrollinhalt: der erste
+  // frei scrollende Sichtbereich beginnt in Sizer-Koordinaten bei scrollTop + virtualOffsetTop.
+  // Zeile k von rowsHost liegt bei virtualOffsetTop + k*ROW_H — die Offsets kürzen sich also
+  // weg. Wer virtualOffsetTop hier abzieht, verschiebt das Fenster nach oben und lässt den
+  // unteren Bildschirmrand leer (Befund 04).
+  const firstVisible = Math.max(0, Math.floor(scrollTop / ROW_H) - VIRTUAL_OVERSCAN);
+  const lastVisible = Math.min(totalVirtualRows - 1, Math.ceil((scrollTop + viewportH) / ROW_H) + VIRTUAL_OVERSCAN);
 
   let html = '';
   for (let k = firstVisible; k <= lastVisible; k++) {
@@ -1053,10 +1211,9 @@ function renderVirtual() {
     html += buildRowHTML(k, viewRow, ctx);
   }
   rowsHost.innerHTML = html;
-  bindRowEvents();
   placeFillHandle();
 }
-function escapeAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function escapeAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function bindHeaderEvents() {
   const head = document.getElementById('grid-header');
@@ -1088,51 +1245,103 @@ function bindHeaderEvents() {
 
 let dragSelect = null, resizeOp = null, autoFillOp = null, rowDragOp = null, colDragOp = null;
 
-function bindGroupClicks(container) {
-  container.querySelectorAll('.grid-row.group-header').forEach(el => {
-    el.addEventListener('click', () => {
-      const gk = el.dataset.gk;
-      if (appState.collapsedGroups.has(gk)) appState.collapsedGroups.delete(gk);
-      else appState.collapsedGroups.add(gk);
-      buildViewRows(); renderAll();
-    });
-  });
-}
-function bindRowEvents() {
+/**
+ * Zeilen- und Zell-Ereignisse laufen über Delegation: renderVirtual() ersetzt pro Frame
+ * das gesamte innerHTML, einzeln gebundene Listener müssten also jedes Mal neu gesetzt
+ * werden (und die auf den Containern selbst häuften sich sogar unbegrenzt an).
+ * Die Container bleiben über die Laufzeit bestehen, deshalb genügt eine einmalige Bindung.
+ */
+let gridEventsBound = false;
+function bindGridEvents() {
+  if (gridEventsBound) return;
   const rowsHost = document.getElementById('grid-rows');
   const frozenHost = document.getElementById('grid-frozen');
-  bindGroupClicks(rowsHost);
-  if (frozenHost) bindGroupClicks(frozenHost);
-  const containers = [rowsHost];
-  if (frozenHost && frozenHost.style.display !== 'none') containers.push(frozenHost);
+  if (!rowsHost) return;
+  gridEventsBound = true;
+  let hoverCell = null;
 
-  for (const cont of containers) {
-    cont.querySelectorAll('[data-rix]').forEach(td => {
-      const ri = +td.dataset.rix;
-      td.addEventListener('click', e => { e.stopPropagation(); if (e.shiftKey && appState.selection?.type === 'rows') { const a = appState.selection.anchorR; setSelection('rows', Math.min(a,ri), 0, Math.max(a,ri), appState.headers.length-1, a, 0); appState.active = {r:ri,c:0}; updateSelectionDOM(); } else { selectRow(ri); } });
-      td.addEventListener('contextmenu', e => { e.preventDefault(); if (!isCellSelected(ri,0) || appState.selection?.type!=='rows') selectRow(ri); showContextMenu(e.clientX, e.clientY, 'row'); });
-      td.addEventListener('dragstart', e => { rowDragOp = { from: ri }; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain','row:'+ri); } catch(_){} });
-      td.addEventListener('dragend', () => { rowDragOp = null; clearRowDropLine(); });
+  for (const cont of [rowsHost, frozenHost]) {
+    if (!cont) continue;
+
+    cont.addEventListener('click', e => {
+      const gh = e.target.closest('.grid-row.group-header');
+      if (gh) {
+        const gk = gh.dataset.gk;
+        if (appState.collapsedGroups.has(gk)) appState.collapsedGroups.delete(gk);
+        else appState.collapsedGroups.add(gk);
+        buildViewRows(); renderAll();
+        return;
+      }
+      const idx = e.target.closest('[data-rix]');
+      if (!idx) return;
+      e.stopPropagation();
+      const ri = +idx.dataset.rix;
+      if (e.shiftKey && appState.selection?.type === 'rows') {
+        const a = appState.selection.anchorR;
+        setSelection('rows', Math.min(a,ri), 0, Math.max(a,ri), appState.headers.length-1, a, 0);
+        appState.active = {r:ri,c:0}; updateSelectionDOM();
+      } else selectRow(ri);
     });
-    cont.querySelectorAll('.gcell[data-r]').forEach(td => {
+
+    cont.addEventListener('contextmenu', e => {
+      const idx = e.target.closest('[data-rix]');
+      if (idx) {
+        e.preventDefault();
+        const ri = +idx.dataset.rix;
+        if (!isCellSelected(ri,0) || appState.selection?.type !== 'rows') selectRow(ri);
+        showContextMenu(e.clientX, e.clientY, 'row');
+        return;
+      }
+      const td = e.target.closest('.gcell[data-r]');
+      if (!td) return;
+      e.preventDefault();
       const r = +td.dataset.r, c = +td.dataset.c;
-      td.addEventListener('mousedown', e => {
-        if (e.target.classList.contains('fill-handle')) return;
-        if (td.classList.contains('editing')) return;
-        if (e.button === 2) { if (!isCellSelected(r,c)) selectCell(r,c); return; }
-        if (e.shiftKey && appState.selection) { const a = appState.selection; setSelection('cells', a.anchorR, a.anchorC, r, c, a.anchorR, a.anchorC); appState.active = {r,c}; updateSelectionDOM(); }
-        else { selectCell(r,c); dragSelect = { startR:r, startC:c }; }
-      });
-      td.addEventListener('mouseenter', () => {
-        if (autoFillOp) { autoFillOp.currentR = r; showAutoFillPreview(); return; }
-        if (!dragSelect) return;
-        setSelection('cells', dragSelect.startR, dragSelect.startC, r, c, dragSelect.startR, dragSelect.startC);
-        appState.active = {r,c}; updateSelectionDOM();
-      });
-      td.addEventListener('dblclick', () => beginEditCell(r,c));
-      td.addEventListener('contextmenu', e => { e.preventDefault(); if (!isCellSelected(r,c)) selectCell(r,c); showContextMenu(e.clientX, e.clientY, 'cell'); });
+      if (!isCellSelected(r,c)) selectCell(r,c);
+      showContextMenu(e.clientX, e.clientY, 'cell');
     });
+
+    cont.addEventListener('mousedown', e => {
+      const td = e.target.closest('.gcell[data-r]');
+      if (!td || td.classList.contains('row-idx')) return;
+      if (e.target.classList.contains('fill-handle')) return;
+      if (td.classList.contains('editing')) return;
+      const r = +td.dataset.r, c = +td.dataset.c;
+      if (e.button === 2) { if (!isCellSelected(r,c)) selectCell(r,c); return; }
+      if (e.shiftKey && appState.selection) {
+        const a = appState.selection;
+        setSelection('cells', a.anchorR, a.anchorC, r, c, a.anchorR, a.anchorC);
+        appState.active = {r,c}; updateSelectionDOM();
+      } else { selectCell(r,c); dragSelect = { startR:r, startC:c }; }
+    });
+
+    // mouseenter steigt nicht auf — mouseover schon, und Zellen haben keine Kindelemente.
+    cont.addEventListener('mouseover', e => {
+      if (!autoFillOp && !dragSelect) return;
+      const td = e.target.closest('.gcell[data-r]');
+      if (!td || td === hoverCell) return;
+      hoverCell = td;
+      const r = +td.dataset.r, c = +td.dataset.c;
+      if (autoFillOp) { autoFillOp.currentR = r; showAutoFillPreview(); return; }
+      setSelection('cells', dragSelect.startR, dragSelect.startC, r, c, dragSelect.startR, dragSelect.startC);
+      appState.active = {r,c}; updateSelectionDOM();
+    });
+
+    cont.addEventListener('dblclick', e => {
+      const td = e.target.closest('.gcell[data-r]');
+      if (!td || td.classList.contains('row-idx')) return;
+      beginEditCell(+td.dataset.r, +td.dataset.c);
+    });
+
+    cont.addEventListener('dragstart', e => {
+      const idx = e.target.closest('[data-rix]');
+      if (!idx) return;
+      rowDragOp = { from: +idx.dataset.rix };
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain','row:'+rowDragOp.from); } catch(_){}
+    });
+    cont.addEventListener('dragend', () => { rowDragOp = null; clearRowDropLine(); });
   }
+
   rowsHost.addEventListener('dragover', e => {
     if (!rowDragOp) return;
     e.preventDefault();
@@ -1143,9 +1352,9 @@ function bindRowEvents() {
     const line = document.createElement('div'); line.className = 'row-drop-line'; line.id = 'rdl';
     line.style.top = (top ? t.offsetTop : t.offsetTop + r.height - 2) + 'px';
     line.dataset.target = t.dataset.rix; line.dataset.pos = top ? 'before' : 'after';
-    document.getElementById('grid-rows').appendChild(line);
+    rowsHost.appendChild(line);
   });
-  rowsHost.addEventListener('drop', e => { if (!rowDragOp) return; e.preventDefault(); const line = document.getElementById('rdl'); if (line) moveRow(rowDragOp.from, +line.dataset.target, line.dataset.pos); rowDragOp = null; clearRowDropLine(); });
+  rowsHost.addEventListener('drop', e => { if (!rowDragOp) return; e.preventDefault(); e.stopPropagation(); const line = document.getElementById('rdl'); if (line) moveRow(rowDragOp.from, +line.dataset.target, line.dataset.pos); rowDragOp = null; clearRowDropLine(); });
 }
 function clearRowDropLine() { const l = document.getElementById('rdl'); if (l) l.remove(); }
 
@@ -1180,15 +1389,19 @@ function updateStatus() {
 
   const sel = normalizedSel();
   if (!sel) { document.getElementById('stat-sel').textContent = 'Auswahl: –'; document.getElementById('stat-sum').style.display = 'none'; return; }
-  const nR = sel.r2 - sel.r1 + 1, nC = sel.c2 - sel.c1 + 1;
+  // Ausgefilterte Zeilen und ausgeblendete Spalten gehören weder in die Anzahl
+  // noch in die Summe — sonst prüft man einen Filter mit einer Zahl, die ihn ignoriert.
+  const selRows = selectedVisibleRows(sel);
+  const selCols = selectedVisibleCols(sel);
+  const nR = selRows.length, nC = selCols.length;
   let label = '';
-  if (appState.selection.type === 'rows') label = `${nR} Zeile${nR>1?'n':''}`;
-  else if (appState.selection.type === 'cols') label = `${nC} Spalte${nC>1?'n':''}`;
+  if (appState.selection.type === 'rows') label = `${nR} Zeile${nR===1?'':'n'}`;
+  else if (appState.selection.type === 'cols') label = `${nC} Spalte${nC===1?'':'n'}`;
   else label = (nR===1&&nC===1) ? `Zelle R${sel.r1+1}, C${sel.c1+1}` : `${nR}×${nC} Zellen`;
   document.getElementById('stat-sel').textContent = `Auswahl: ${label}`;
   if (nR * nC > 1 && nR * nC < 100000) {
     let sum = 0, count = 0;
-    for (let r=sel.r1; r<=sel.r2; r++) for (let c=sel.c1; c<=sel.c2; c++) {
+    for (const r of selRows) for (const c of selCols) {
       const v = appState.rows[r]?.[c]; if (v === undefined || v === '') continue;
       const n = ColumnTypes.parseNumber(v); if (!isNaN(n) && isFinite(n)) { sum += n; count++; }
     }
@@ -1200,9 +1413,15 @@ function updateStatus() {
 /* =============================================================
    EDIT
    ============================================================= */
+/* Solange ein Zelleditor offen ist, darf renderVirtual() das innerHTML nicht ersetzen —
+   sonst löscht ein bereits eingeplanter Frame (z. B. aus dem selectCell des ersten
+   Klicks) den gerade geöffneten Editor wieder weg. */
+let editingCell = null;
+
 function beginEditCell(r, c) {
   const td = document.querySelector(`.gcell[data-r="${r}"][data-c="${c}"]`);
   if (!td) return;
+  editingCell = { r, c };
   td.classList.add('editing');
   const old = appState.rows[r][c] ?? '';
   const editor = document.createElement('textarea');
@@ -1210,6 +1429,7 @@ function beginEditCell(r, c) {
   td.innerHTML = ''; td.appendChild(editor);
   editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length);
   const finish = (commit, advance=null) => {
+    editingCell = null;
     editor.removeEventListener('blur', onBlur); editor.removeEventListener('keydown', onKey);
     if (commit && editor.value !== old) {
       pushHistory({ label:'Zelle bearbeiten', type:'editCells', changes:[{r,c,from:old,to:editor.value}] });
@@ -1231,18 +1451,25 @@ function beginEditCell(r, c) {
 }
 
 function moveActive(dr, dc, extend=false) {
-  // Nur data-Zeilen aus dem aktuellen Render-Plan (überspringt collapsed groups & group-header)
-  const visR = appState.viewRows.filter(v => v.kind === 'data').map(v => v.rIdx);
+  // Bewegt sich im Render-Plan (überspringt eingeklappte Gruppen und Gruppenköpfe).
+  // Die Position wird über die Index-Karte aus buildViewRows() gefunden — ein linearer
+  // Scan pro Tastendruck ist bei Hunderttausenden Zeilen zu langsam (Befund 07).
   const visCols = appState.cols.map((c,i)=>({i,c})).filter(x=>!x.c.hidden).map(x=>x.i);
-  if (!visR.length || !visCols.length) return;
-  let { r, c } = appState.active;
-  let rPos = visR.indexOf(r);
-  if (rPos < 0) rPos = 0;
+  if (!visCols.length) return;
+  const { r, c } = appState.active;
+  let vk = findViewRowByData(r);
+  if (vk < 0) vk = firstDataViewRow();
+  if (vk < 0) return;
+  const step = dr < 0 ? -1 : 1;
+  for (let n = Math.abs(dr); n > 0; n--) {
+    const next = nextDataViewRow(vk, step);
+    if (next === vk) break;     // Anfang bzw. Ende der Tabelle erreicht
+    vk = next;
+  }
   let cPos = visCols.indexOf(c);
   if (cPos < 0) cPos = 0;
-  const nrPos = Math.max(0, Math.min(visR.length-1, rPos + dr));
   const ncPos = Math.max(0, Math.min(visCols.length-1, cPos + dc));
-  const nr = visR[nrPos], nc = visCols[ncPos];
+  const nr = appState.viewRows[vk].rIdx, nc = visCols[ncPos];
   if (extend && appState.selection) { const a = appState.selection; setSelection('cells', a.anchorR, a.anchorC, nr, nc, a.anchorR, a.anchorC); appState.active = {r:nr,c:nc}; updateSelectionDOM(); }
   else selectCell(nr, nc);
   scrollIntoView(nr, nc);
@@ -1274,10 +1501,10 @@ function scrollIntoView(r, c) {
    ============================================================= */
 function getSelectionAsMatrix() {
   const sel = normalizedSel(); if (!sel) return null;
-  let rRange, cRange; const visR = appState.visibleIndices;
-  if (appState.selection.type === 'rows') { rRange = visR.filter(r => r>=sel.r1 && r<=sel.r2); cRange = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden); }
-  else if (appState.selection.type === 'cols') { rRange = visR; cRange = []; for (let c=sel.c1; c<=sel.c2; c++) if (!appState.cols[c].hidden) cRange.push(c); }
-  else { rRange = visR.filter(r => r>=sel.r1 && r<=sel.r2); cRange = []; for (let c=sel.c1; c<=sel.c2; c++) if (!appState.cols[c].hidden) cRange.push(c); }
+  const rRange = selectedVisibleRows(sel);
+  const cRange = appState.selection.type === 'rows'
+    ? appState.cols.map((c,i)=>i).filter(i => !appState.cols[i].hidden)
+    : selectedVisibleCols(sel);
   const data = rRange.map(r => cRange.map(c => appState.rows[r][c] ?? ''));
   return { data, rRange, cRange };
 }
@@ -1309,14 +1536,17 @@ function doPaste(text) {
   const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden && i>=startC);
   const visR = appState.visibleIndices;
   const rPos = visR.indexOf(startR); if (rPos < 0) return;
-  const needCols = data[0].length; const newCols = []; let targetCols = [];
+  // Alle Teilschritte (neue Spalten, neue Zeilen, Werte) werden gesammelt und als
+  // EIN batch-Befehl in die Historie gelegt — ein Strg+Z nimmt das Einfügen ganz zurück.
+  const subs = [];
+  const needCols = data[0].length; let targetCols = [];
   for (let k=0; k<needCols; k++) {
     if (k < visC.length) targetCols.push(visC[k]);
-    else { const at = appState.headers.length; pushHistory({ label:'Spalte für Einfügen', type:'addCol', at, name:`Spalte ${at+1}`, width: DEFAULT_COL_WIDTH }); applyForward({ type:'addCol', at, name:`Spalte ${at+1}`, width: DEFAULT_COL_WIDTH }); newCols.push(at); targetCols.push(at); }
+    else { const at = appState.headers.length; const cmd = { type:'addCol', at, name:`Spalte ${at+1}`, width: DEFAULT_COL_WIDTH }; subs.push(cmd); applyForward(cmd); targetCols.push(at); }
   }
   const newRows = [];
   for (let i=0; i<data.length; i++) {
-    if (rPos + i >= visR.length) { const at = appState.rows.length; const r = appState.headers.map(()=>''); pushHistory({ label:'Zeile für Einfügen', type:'addRows', at, rowsData:[r.slice()] }); applyForward({ type:'addRows', at, rowsData:[r.slice()] }); newRows.push(at); }
+    if (rPos + i >= visR.length) { const at = appState.rows.length; const r = appState.headers.map(()=>''); const cmd = { type:'addRows', at, rowsData:[r.slice()] }; subs.push(cmd); applyForward(cmd); newRows.push(at); }
   }
   rebuildVisible(); const visRupd = appState.visibleIndices;
   const changes = [];
@@ -1324,7 +1554,9 @@ function doPaste(text) {
     const targetR = (rPos + i < visRupd.length) ? visRupd[rPos + i] : newRows[i - (visRupd.length - rPos)];
     for (let j=0; j<data[i].length && j<targetCols.length; j++) { const c = targetCols[j]; const from = appState.rows[targetR][c] ?? ''; const to = data[i][j]; if (from !== to) changes.push({ r: targetR, c, from, to }); }
   }
-  if (changes.length) { pushHistory({ label:'Einfügen', type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ch.to; }
+  if (changes.length) { subs.push({ type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ch.to; }
+  if (subs.length === 1) pushHistory({ label:'Einfügen', ...subs[0] });
+  else if (subs.length > 1) pushHistory({ label:'Einfügen', type:'batch', cmds: subs });
   rebuildVisible();
   const endVPos = Math.min(visRupd.length - 1, rPos + data.length - 1);
   const endRow = endVPos >= 0 ? visRupd[endVPos] : (newRows[newRows.length-1] ?? startR);
@@ -1369,7 +1601,30 @@ function moveRow(from, to, pos) { if (from === to) return; let insertAt = (to > 
 function moveColumn(from, to, pos) { if (from === to) return; let insertAt = (to > from) ? to - 1 : to; if (pos === 'after') insertAt += 1; insertAt = Math.max(0, Math.min(appState.cols.length - 1, insertAt)); if (insertAt === from) return; pushHistory({ label:'Spalte verschieben', type:'moveCol', from, to: insertAt }); applyForward({ type:'moveCol', from, to: insertAt }); rebuildVisible(); renderAll(); }
 
 function hideColumn(ci) { pushHistory({ label:'Spalte ausblenden', type:'colMeta', c:ci, key:'hidden', from:false, to:true }); appState.cols[ci].hidden = true; renderAll(); }
-function showAllColumns() { const changes = []; for (let i=0; i<appState.cols.length; i++) if (appState.cols[i].hidden) changes.push(i); if (!changes.length) return; for (const i of changes) pushHistory({ label:'Spalten einblenden', type:'colMeta', c:i, key:'hidden', from:true, to:false }); for (const i of changes) appState.cols[i].hidden = false; renderAll(); }
+function showAllColumns() {
+  const cmds = [];
+  for (let i=0; i<appState.cols.length; i++) if (appState.cols[i].hidden) cmds.push({ type:'colMeta', c:i, key:'hidden', from:true, to:false });
+  if (!cmds.length) return;
+  pushHistory({ label:`${cmds.length} Spalte(n) einblenden`, type:'batch', cmds });
+  applyForward({ type:'batch', cmds });
+  renderAll();
+}
+function unpinAllColumns() {
+  const cmds = [];
+  appState.cols.forEach((c,i) => { if (c.pinned) cmds.push({ type:'colMeta', c:i, key:'pinned', from:true, to:false }); });
+  if (!cmds.length) return;
+  pushHistory({ label:'Fixierungen aufheben', type:'batch', cmds });
+  applyForward({ type:'batch', cmds });
+  renderAll();
+}
+function redetectTypes() {
+  const cmds = [];
+  appState.cols.forEach((c,i) => { if (c.type && c.type !== 'auto') cmds.push({ type:'colMeta', c:i, key:'type', from:c.type, to:'auto' }); });
+  if (cmds.length) { pushHistory({ label:'Spaltentypen neu erkennen', type:'batch', cmds }); applyForward({ type:'batch', cmds }); }
+  ColumnTypes.detectAll();
+  renderAll();
+  toast('Spaltentypen neu erkannt.');
+}
 function togglePin(ci) { const cur = appState.cols[ci].pinned; pushHistory({ label: cur?'Fixierung aufheben':'Spalte fixieren', type:'colMeta', c:ci, key:'pinned', from:cur, to:!cur }); appState.cols[ci].pinned = !cur; renderAll(); }
 function autoFitColumn(ci) {
   const canvas = autoFitColumn._cv || (autoFitColumn._cv = document.createElement('canvas'));
@@ -1377,9 +1632,8 @@ function autoFitColumn(ci) {
   ctx.font = '600 12.5px ' + getComputedStyle(document.body).fontFamily;
   let maxW = ctx.measureText(appState.headers[ci] || '').width + 80;
   ctx.font = '12.5px ' + getComputedStyle(document.body).fontFamily;
-  const t = ColumnTypes.effectiveType(ci);
   const sample = appState.visibleIndices.slice(0, 500);
-  for (const r of sample) { const v = ColumnTypes.formatValue(appState.rows[r][ci] ?? '', t); const w = ctx.measureText(String(v)).width; if (w > maxW) maxW = w; }
+  for (const r of sample) { const v = ColumnTypes.formatCell(ci, appState.rows[r][ci] ?? ''); const w = ctx.measureText(String(v)).width; if (w > maxW) maxW = w; }
   const oldW = appState.cols[ci].width; const newW = Math.max(60, Math.min(600, Math.round(maxW + 22)));
   if (oldW !== newW) { pushHistory({ label:'Auto-Breite', type:'colMeta', c:ci, key:'width', from:oldW, to:newW }); appState.cols[ci].width = newW; renderAll(); }
 }
@@ -1462,7 +1716,7 @@ function showContextMenu(x, y, kind) {
     const vk = findViewRowByData(sel1.r1);
     if (vk >= 0) {
       const upTo = vk + 1;
-      items.push({ label:`Bis hier einfrieren (${upTo} Zeile${upTo>1?'n':''})`, act:()=>{ appState.frozenRows = Math.min(20, upTo); renderAll(); } });
+      items.push({ label:`Bis hier einfrieren (${upTo} Zeile${upTo>1?'n':''})`, act:()=>{ appState.frozenRows = Math.min(FROZEN_ROWS_MAX, upTo); renderAll(); } });
     }
     if (appState.frozenRows > 0) items.push({ label:'Einfrieren aufheben', act:()=>{ appState.frozenRows = 0; renderAll(); } });
     items.push({ divider:true });
@@ -1569,17 +1823,15 @@ function getUniqueValuesForCol(ci) {
   // Sammelt Werte, ABER unter Berücksichtigung der OTHER Spaltenfilter (Excel-Verhalten)
   const map = new Map(); // displayKey -> { display, count, raw }
   const type = ColumnTypes.effectiveType(ci);
+  const others = activeColFilters().filter(a => a.c !== ci);
   let truncated = false;
   for (let r = 0; r < appState.rows.length; r++) {
     // Prüfe alle anderen Spaltenfilter (außer ci selbst)
     let pass = true;
-    for (let c = 0; c < appState.cols.length; c++) {
-      if (c === ci) continue;
-      const f = appState.cols[c].filter; if (!f) continue;
+    for (const { c, f, type: ct } of others) {
       const v = appState.rows[r][c] ?? '';
-      if (f.kind === 'values') { const key = v === '' ? '__EMPTY__' : String(v); if (f.excluded && f.excluded.includes(key)) { pass = false; break; } }
+      if (f.kind === 'values') { const key = v === '' ? '__EMPTY__' : String(v); if (excludedSet(f).has(key)) { pass = false; break; } }
       else if (f.kind === 'range') {
-        const ct = ColumnTypes.effectiveType(c);
         if (ct === 'number') { if (v === '' && (f.min!=null || f.max!=null)) { pass=false; break; } const n = ColumnTypes.parseNumber(v); if (isNaN(n)) { pass=false; break; } if (f.min != null && n < f.min) { pass=false; break; } if (f.max != null && n > f.max) { pass=false; break; } }
         else if (ct === 'date') { if (v === '' && (f.min!=null || f.max!=null)) { pass=false; break; } const t = ColumnTypes.parseDate(v); if (isNaN(t)) { pass=false; break; } if (f.min != null && t < f.min) { pass=false; break; } if (f.max != null && t > f.max) { pass=false; break; } }
       }
@@ -1587,7 +1839,7 @@ function getUniqueValuesForCol(ci) {
     if (!pass) continue;
     const raw = appState.rows[r][ci] ?? '';
     const key = raw === '' ? '__EMPTY__' : String(raw);
-    const display = raw === '' ? '(Leer)' : ColumnTypes.formatValue(raw, type);
+    const display = raw === '' ? '(Leer)' : ColumnTypes.formatCell(ci, raw);
     if (map.has(key)) map.get(key).count++;
     else {
       if (map.size >= FILTER_LIST_MAX) { truncated = true; continue; }
@@ -1662,8 +1914,7 @@ function bindFilterPopupEvents(pop) {
 
   pop.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => {
     filterPopState.tab = btn.dataset.tab;
-    pop.outerHTML;
-    // re-render
+    // Popup an gleicher Stelle neu aufbauen
     const host = document.getElementById('filter-pop-host');
     const rect = pop.getBoundingClientRect();
     host.innerHTML = '';
@@ -1779,13 +2030,15 @@ function applyFilterPopup() {
 }
 
 function clearAllFilters() {
-  const targets = [];
-  for (let i=0; i<appState.cols.length; i++) if (appState.cols[i].filter) targets.push(i);
-  if (!targets.length) return;
-  for (const i of targets) pushHistory({ label:'Alle Filter zurücksetzen', type:'colFilter', c:i, from: JSON.parse(JSON.stringify(appState.cols[i].filter)), to:null });
-  for (const i of targets) appState.cols[i].filter = null;
+  const cmds = [];
+  for (let i=0; i<appState.cols.length; i++) {
+    if (appState.cols[i].filter) cmds.push({ type:'colFilter', c:i, from: JSON.parse(JSON.stringify(appState.cols[i].filter)), to:null });
+  }
+  if (!cmds.length) return;
+  pushHistory({ label:'Alle Filter zurücksetzen', type:'batch', cmds });
+  applyForward({ type:'batch', cmds });
   rebuildVisible(); renderAll();
-  toast(`${targets.length} Filter entfernt.`);
+  toast(`${cmds.length} Filter entfernt.`);
 }
 
 /* =============================================================
@@ -1793,8 +2046,12 @@ function clearAllFilters() {
    ============================================================= */
 function clearSelectionValues() {
   const sel = normalizedSel(); if (!sel) return;
+  // Nur was der Nutzer auch sieht: ausgefilterte Zeilen und ausgeblendete Spalten
+  // bleiben unberührt — sonst ist es stiller Datenverlust (Befund 01).
+  const rows = selectedVisibleRows(sel);
+  const cols = selectedVisibleCols(sel);
   const changes = [];
-  for (let r=sel.r1; r<=sel.r2; r++) for (let c=sel.c1; c<=sel.c2; c++) { if (!appState.rows[r]) continue; const from = appState.rows[r][c] ?? ''; if (from !== '') changes.push({ r, c, from, to:'' }); }
+  for (const r of rows) for (const c of cols) { if (!appState.rows[r]) continue; const from = appState.rows[r][c] ?? ''; if (from !== '') changes.push({ r, c, from, to:'' }); }
   if (changes.length) { pushHistory({ label:'Auswahl leeren', type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ''; scheduleRender(); updateStatus(); if (hasAnyColFilter()) { rebuildVisible(); renderAll(); } }
 }
 function toggleSort(col) { if (appState.sort.col !== col) appState.sort = { col, dir:1 }; else { const d = appState.sort.dir; appState.sort.dir = d===1?-1:d===-1?0:1; if (appState.sort.dir===0) appState.sort.col = -1; } rebuildVisible(); renderAll(); }
@@ -1802,9 +2059,10 @@ function newEmpty() {
   appState.fileName = 'untitled.csv'; appState.fileSize = 0;
   appState.headers = ['Spalte 1','Spalte 2','Spalte 3'];
   appState.rows = [['','',''], ['','',''], ['','','']];
-  appState.cols = appState.headers.map(()=>({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', filter:null }));
+  appState.rawText = serializeCSV(appState.headers, appState.rows, ',');
+  appState.cols = appState.headers.map(()=>({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, filter:null }));
   appState.delimiter = ','; appState.sort = { col:-1, dir:0 }; appState.filter = '';
-  appState.selection = null; appState.active = {r:0,c:0}; appState.history = { past:[], future:[] }; appState.search = { hits:[], current:-1 };
+  appState.selection = null; appState.active = {r:0,c:0}; appState.history = { past:[], future:[] }; appState.search = { hits:[], current:-1, query:'', onlyHits:false };
   appState.frozenRows = 0; appState.groupBy = null; appState.collapsedGroups = new Set();
   document.getElementById('search-input').value = ''; document.getElementById('search-nav').style.display = 'none';
   rebuildVisible(); renderAll();
@@ -1817,8 +2075,28 @@ function exportedRows() {
   const cols = visibleCols().map(c => c.ci);
   const headers = cols.map(ci => appState.headers[ci]);
   const types = cols.map(ci => ColumnTypes.effectiveType(ci));
+  const decimals = cols.map(ci => ColumnTypes.decimalsFor(ci));
   const rows = appState.visibleIndices.map(ri => cols.map(ci => appState.rows[ri][ci] ?? ''));
-  return { cols, headers, types, rows };
+  return { cols, headers, types, decimals, rows };
+}
+
+/**
+ * Macht doppelte Spaltennamen eindeutig ("A", "A", "B" → "A", "A_2", "B").
+ * Nötig für Formate mit benannten Feldern: ein JSON-Objekt kann denselben
+ * Schlüssel nicht zweimal führen, die spätere Spalte überschrieb die frühere
+ * bisher stillschweigend (Befund 06).
+ */
+function uniqueHeaderNames(headers) {
+  const belegt = new Set();
+  return headers.map((h, i) => {
+    const basis = String(h ?? '').trim() || `Spalte ${i+1}`;
+    if (!belegt.has(basis)) { belegt.add(basis); return basis; }
+    let n = 2;
+    while (belegt.has(`${basis}_${n}`)) n++;
+    const name = `${basis}_${n}`;
+    belegt.add(name);
+    return name;
+  });
 }
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -1859,9 +2137,9 @@ function escMD(v) {
     .replace(/\r?\n/g, '<br>');
 }
 function buildMarkdown() {
-  const { headers, types, rows } = exportedRows();
+  const { headers, types, decimals, rows } = exportedRows();
   if (!headers.length) return '';
-  const display = rows.map(r => r.map((v, j) => escMD(ColumnTypes.formatValue(v, types[j]))));
+  const display = rows.map(r => r.map((v, j) => escMD(ColumnTypes.formatValue(v, types[j], decimals[j]))));
   const widths = headers.map((h, j) => {
     let w = escMD(h).length;
     for (const r of display) if (r[j].length > w) w = r[j].length;
@@ -1919,9 +2197,10 @@ function typedForJSON(v, t) {
 }
 function buildJSON() {
   const { headers, types, rows } = exportedRows();
+  const namen = uniqueHeaderNames(headers);
   const arr = rows.map(r => {
     const o = {};
-    for (let j=0; j<headers.length; j++) o[headers[j]] = typedForJSON(r[j], types[j]);
+    for (let j=0; j<namen.length; j++) o[namen[j]] = typedForJSON(r[j], types[j]);
     return o;
   });
   return JSON.stringify(arr, null, 2);
@@ -1929,15 +2208,19 @@ function buildJSON() {
 function exportJSON() {
   showLoading('Erzeuge JSON…');
   setTimeout(() => {
+    const { headers } = exportedRows();
+    const umbenannt = uniqueHeaderNames(headers).filter((n,i) => n !== headers[i]).length;
     const json = buildJSON();
     downloadBlob(new Blob([json], { type:'application/json;charset=utf-8;' }), baseFileName() + '.json');
-    hideLoading(); toast('JSON gespeichert.', 'success');
+    hideLoading();
+    if (umbenannt) toast(`JSON gespeichert. ${umbenannt} doppelte Spaltenname(n) wurden eindeutig gemacht.`, 'warn');
+    else toast('JSON gespeichert.', 'success');
   }, 0);
 }
 
 /* ---------- HTML ---------- */
 function buildHTML() {
-  const { headers, types, rows } = exportedRows();
+  const { headers, types, decimals, rows } = exportedRows();
   const title = baseFileName() || 'Tabelle';
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   const align = t => (t === 'number' || t === 'date') ? 'right' : 'left';
@@ -1954,7 +2237,7 @@ function buildHTML() {
   `;
   const thead = headers.map((h, j) => `<th class="${types[j]==='number'?'num':types[j]==='date'?'date':''}">${escapeHTML(h)}</th>`).join('');
   const tbody = rows.map(r => '<tr>' + r.map((v, j) => {
-    const disp = ColumnTypes.formatValue(v, types[j]);
+    const disp = ColumnTypes.formatValue(v, types[j], decimals[j]);
     const cls = types[j] === 'number' ? 'num' : types[j] === 'date' ? 'date' : '';
     return `<td class="${cls}">${escapeHTML(disp)}</td>`;
   }).join('') + '</tr>').join('\n');
@@ -1995,7 +2278,7 @@ function escJira(v) {
     .replace(/\r?\n/g, ' \\\\ ');  // Jira Wiki: \\ erzwingt Zeilenumbruch
 }
 function buildJira() {
-  const { headers, types, rows } = exportedRows();
+  const { headers, types, decimals, rows } = exportedRows();
   if (!headers.length) return '';
   const lines = [];
   // Header-Zeile: doppelte Pipes
@@ -2003,7 +2286,7 @@ function buildJira() {
   // Datenzeilen: einfache Pipes; leere Zellen als einzelnes Leerzeichen (sonst kollabiert die Zelle)
   for (const r of rows) {
     lines.push('|' + r.map((v, j) => {
-      const s = escJira(ColumnTypes.formatValue(v, types[j]));
+      const s = escJira(ColumnTypes.formatValue(v, types[j], decimals[j]));
       return s === '' ? ' ' : s;
     }).join('|') + '|');
   }
@@ -2285,9 +2568,9 @@ function showViewMenu() {
   }));
   menu.querySelector('#fz-custom').addEventListener('click', () => {
     const cur = appState.frozenRows;
-    const s = prompt(`Anzahl eingefrorener Zeilen (0–20):`, String(cur));
+    const s = prompt(`Anzahl eingefrorener Zeilen (0–${FROZEN_ROWS_MAX}):`, String(cur));
     if (s === null) return;
-    const n = Math.max(0, Math.min(20, parseInt(s, 10) || 0));
+    const n = Math.max(0, Math.min(FROZEN_ROWS_MAX, parseInt(s, 10) || 0));
     appState.frozenRows = n; host.innerHTML=''; renderAll();
   });
   menu.querySelectorAll('input[name="gb"]').forEach(el => el.addEventListener('change', () => {
@@ -2355,8 +2638,15 @@ function onDocExport(e) { if (!e.target.closest('.menu-pop') && !e.target.closes
 /* =============================================================
    SEARCH
    ============================================================= */
+/**
+ * Sucht und MARKIERT die Treffer, ohne die Tabelle zu filtern — sonst wäre die
+ * Treffernavigation sinnlos, weil ohnehin nur Treffer zu sehen wären (Befund 13).
+ * Ausblenden übernimmt der Schalter „Nur Treffer", der den Volltextfilter setzt.
+ */
 function performSearch(q) {
-  appState.filter = q; rebuildVisible();
+  appState.search.query = q;
+  const wanted = q && appState.search.onlyHits ? q : '';
+  if (appState.filter !== wanted) { appState.filter = wanted; rebuildVisible(); }
   const hits = [];
   if (q) {
     const ql = q.toLowerCase();
@@ -2367,11 +2657,17 @@ function performSearch(q) {
   }
   appState.search.hits = hits; appState.search.current = hits.length ? 0 : -1;
   const nav = document.getElementById('search-nav');
-  if (q && hits.length) { nav.style.display = 'flex'; document.getElementById('search-count').textContent = `${hits.length ? 1 : 0}/${hits.length.toLocaleString('de-DE')}`; }
-  else if (q) { nav.style.display = 'flex'; document.getElementById('search-count').textContent = `0/0`; }
+  const onlyBtn = document.getElementById('search-only');
+  onlyBtn.classList.toggle('on', !!appState.search.onlyHits);
+  if (q) { nav.style.display = 'flex'; document.getElementById('search-count').textContent = `${hits.length ? 1 : 0}/${hits.length.toLocaleString('de-DE')}`; }
   else nav.style.display = 'none';
   renderAll();
   if (appState.search.current >= 0) jumpToHit(0);
+}
+function toggleSearchOnlyHits() {
+  appState.search.onlyHits = !appState.search.onlyHits;
+  performSearch(appState.search.query);
+  toast(appState.search.onlyHits ? 'Es werden nur noch Zeilen mit Treffern angezeigt.' : 'Alle Zeilen werden wieder angezeigt.');
 }
 function jumpToHit(delta) {
   const total = appState.search.hits.length; if (!total) return;
@@ -2409,7 +2705,10 @@ function srCompile(opts) {
   if (!opts.find) { SRState.compiledRegex = null; return; }
   try {
     if (opts.regex) {
-      SRState.compiledRegex = new RegExp(opts.find, opts.caseSens ? 'g' : 'gi');
+      // „Ganze Zelle" muss auch mit Regex greifen. Die nicht-einfangende Gruppe hält
+      // Alternativen wie a|b zusammen und verschiebt keine Rückverweise (Befund 09).
+      const pattern = opts.whole ? '^(?:' + opts.find + ')$' : opts.find;
+      SRState.compiledRegex = new RegExp(pattern, opts.caseSens ? 'g' : 'gi');
     } else {
       const escaped = opts.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const pattern = opts.whole ? '^' + escaped + '$' : escaped;
@@ -2530,22 +2829,23 @@ function showOptsMenu() {
     <label class="it"><input type="radio" name="hdr" value="yes" ${appState.parserOpts.header==='yes'?'checked':''}/> Erste Zeile = Kopfzeile</label>
     <label class="it"><input type="radio" name="hdr" value="no" ${appState.parserOpts.header==='no'?'checked':''}/> Erste Zeile = Daten</label>
     <div class="divider"></div>
+    <div class="it" id="opts-reparse" ${appState.rawText?'':'style="opacity:.5;pointer-events:none"'}>Datei neu einlesen<span class="sc">verwirft Historie</span></div>
+    <div class="divider"></div>
     <div class="it" id="opts-show-all" ${appState.cols.some(c=>c.hidden)?'':'style="opacity:.5;pointer-events:none"'}>Alle Spalten einblenden</div>
     <div class="it" id="opts-unpin" ${appState.cols.some(c=>c.pinned)?'':'style="opacity:.5;pointer-events:none"'}>Alle Fixierungen aufheben</div>
     <div class="it" id="opts-redetect" ${appState.headers.length?'':'style="opacity:.5;pointer-events:none"'}>Spaltentypen neu erkennen</div>
     <div class="it danger" id="opts-clear-filters" ${hasAnyColFilter()?'':'style="opacity:.5;pointer-events:none"'}>Alle Filter zurücksetzen</div>
   `;
   host.appendChild(menu);
-  menu.querySelectorAll('input[name="del"]').forEach(el => el.addEventListener('change', () => { appState.parserOpts.delimiter = el.value; if (appState.fileName) toast('Trennzeichen wirkt beim nächsten Öffnen.'); }));
-  menu.querySelectorAll('input[name="hdr"]').forEach(el => el.addEventListener('change', () => { appState.parserOpts.header = el.value; if (appState.fileName) toast('Kopfzeilen-Option wirkt beim nächsten Öffnen.'); }));
+  // Trennzeichen und Kopfzeilen-Option wirken erst beim Parsen. Da der Rohtext gehalten
+  // wird, lässt sich die Datei sofort neu einlesen, statt auf das nächste Öffnen zu warten.
+  const neuEinlesen = () => { host.innerHTML = ''; if (appState.rawText) reparse(); };
+  menu.querySelectorAll('input[name="del"]').forEach(el => el.addEventListener('change', () => { appState.parserOpts.delimiter = el.value; neuEinlesen(); }));
+  menu.querySelectorAll('input[name="hdr"]').forEach(el => el.addEventListener('change', () => { appState.parserOpts.header = el.value; neuEinlesen(); }));
+  menu.querySelector('#opts-reparse').addEventListener('click', neuEinlesen);
   menu.querySelector('#opts-show-all').addEventListener('click', () => { showAllColumns(); host.innerHTML=''; });
-  menu.querySelector('#opts-unpin').addEventListener('click', () => { const targets = []; appState.cols.forEach((c,i) => { if (c.pinned) targets.push(i); }); for (const i of targets) pushHistory({ label:'Fixierungen aufheben', type:'colMeta', c:i, key:'pinned', from:true, to:false }); for (const i of targets) appState.cols[i].pinned = false; renderAll(); host.innerHTML=''; });
-  menu.querySelector('#opts-redetect').addEventListener('click', () => {
-    // Reset manual types to 'auto' and rerun detection
-    const targets = appState.cols.map((c,i) => ({i, c})).filter(x => x.c.type && x.c.type !== 'auto');
-    for (const t of targets) { pushHistory({ label:'Typ auf Auto', type:'colMeta', c:t.i, key:'type', from:t.c.type, to:'auto' }); appState.cols[t.i].type = 'auto'; }
-    ColumnTypes.detectAll(); renderAll(); host.innerHTML=''; toast('Spaltentypen neu erkannt.');
-  });
+  menu.querySelector('#opts-unpin').addEventListener('click', () => { unpinAllColumns(); host.innerHTML=''; });
+  menu.querySelector('#opts-redetect').addEventListener('click', () => { redetectTypes(); host.innerHTML=''; });
   menu.querySelector('#opts-clear-filters').addEventListener('click', () => { clearAllFilters(); host.innerHTML=''; });
   setTimeout(() => document.addEventListener('mousedown', onDocOpts), 0);
 }
@@ -2588,7 +2888,14 @@ window.addEventListener('mouseup', () => {
   if (dragSelect) dragSelect = null;
   if (autoFillOp) commitAutoFill();
 });
-document.addEventListener('DOMContentLoaded', () => { document.getElementById('grid-scroller').addEventListener('scroll', () => scheduleRender(), { passive: true }); });
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('grid-scroller').addEventListener('scroll', () => {
+    // Beim Scrollen wird die Bearbeitung übernommen — der Editor klebt sonst an einer
+    // Zeile, die aus dem gerenderten Fenster läuft.
+    if (editingCell) { const ed = document.querySelector('.gcell.editing .editor'); if (ed) ed.blur(); }
+    scheduleRender();
+  }, { passive: true });
+});
 
 window.addEventListener('keydown', e => {
   const tgt = e.target;
@@ -2612,11 +2919,7 @@ window.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); doCopy(false); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') { e.preventDefault(); doCopy(true); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteFromSys(); }
-  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-    e.preventDefault();
-    const first = appState.visibleIndices[0] ?? 0; const last = appState.visibleIndices[appState.visibleIndices.length-1] ?? 0;
-    setSelection('cells', first, 0, last, appState.headers.length-1, first, 0); updateSelectionDOM();
-  }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAllVisible(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); clearSelectionValues(); }
   else if (e.key === 'F2' || e.key === 'Enter') { e.preventDefault(); beginEditCell(appState.active.r, appState.active.c); }
   else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const r0 = appState.visibleIndices[0] ?? 0; const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden); selectCell(r0, visC[0]); scrollIntoView(r0, visC[0]); }
@@ -2671,13 +2974,27 @@ let searchTimer;
 document.getElementById('search-input').addEventListener('input', e => { clearTimeout(searchTimer); searchTimer = setTimeout(() => performSearch(e.target.value), 150); });
 document.getElementById('search-prev').addEventListener('click', () => jumpToHit(-1));
 document.getElementById('search-next').addEventListener('click', () => jumpToHit(1));
+document.getElementById('search-only').addEventListener('click', toggleSearchOnlyHits);
 
 const dz = document.getElementById('dropzone');
 ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover'); }));
 ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover'); }));
 dz.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
-window.addEventListener('dragover', e => e.preventDefault());
-window.addEventListener('drop', e => { if (rowDragOp || colDragOp) return; e.preventDefault(); if (document.getElementById('empty-state').style.display === 'none') return; const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+// Dateien lassen sich jederzeit ablegen, nicht nur im Leerzustand: sobald eine Tabelle
+// offen ist, verdeckt sie die Dropzone, und es bliebe nur Strg+O (Befund 11).
+const dropOverlay = document.getElementById('drop-overlay');
+function hatDateien(e) { const t = e.dataTransfer; return !!t && Array.from(t.types || []).includes('Files'); }
+function showDropOverlay() { if (appState.headers.length) dropOverlay.classList.add('show'); }
+function hideDropOverlay() { dropOverlay.classList.remove('show'); }
+window.addEventListener('dragover', e => { e.preventDefault(); if (!rowDragOp && !colDragOp && hatDateien(e)) showDropOverlay(); });
+window.addEventListener('dragleave', e => { if (e.relatedTarget === null) hideDropOverlay(); });
+window.addEventListener('drop', e => {
+  if (rowDragOp || colDragOp) return;
+  e.preventDefault();
+  hideDropOverlay();
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
 window.addEventListener('resize', () => scheduleRender());
 
 (function init() {
