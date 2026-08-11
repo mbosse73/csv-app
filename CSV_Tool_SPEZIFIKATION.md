@@ -66,7 +66,7 @@ Browserbasierter CSV-Betrachter und -Editor für mittlere bis sehr große Dateie
 
 ### V0.6.1 — Fehlerbehebungen (NEU)
 
-Behebt die 14 Befunde aus `ANALYSE.md`. Verhaltensrelevant sind:
+Behebt die 17 Befunde aus `ANALYSE.md`. Verhaltensrelevant sind:
 
 | Bereich | Vorher | Jetzt |
 |---|---|---|
