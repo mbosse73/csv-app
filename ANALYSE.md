@@ -8,8 +8,9 @@ gelesen. Der Reproduktions-Harness liegt unter `tools/befunde-repro.mjs`.
 > **Alle Befunde sind behoben** (V0.6.1). Dieses Dokument bleibt als Befundprotokoll
 > erhalten: es hält fest, was gemessen wurde und warum die jeweilige Lösung gewählt wurde.
 > Jeder Befund trägt am Ende eine Zeile **Behoben** mit der umgesetzten Lösung.
-> Befunde 15–18 kamen bei der Nachprüfung dazu und standen nicht in der ursprünglichen Analyse.
-> `npm test` prüft alle Befunde plus Gegenproben — Stand: **26 bestanden, 0 auffällig**.
+> Befunde 15–19 kamen bei der Nachprüfung dazu und standen nicht in der ursprünglichen Analyse.
+> Abschnitt 3a beschreibt den Umbau, der die Ursache hinter sechs von ihnen beseitigt.
+> `npm test` prüft alle Befunde plus Gegenproben — Stand: **32 bestanden, 0 auffällig**.
 
 ---
 
@@ -404,6 +405,78 @@ automatisch heraus. Die Vorschau benutzt dieselbe Liste.
 
 ---
 
+### 19 · MITTEL — Spaltenauswahl ignorierte fixierte Spalten
+`selectedVisibleCols` / Rendering, bei der Nachprüfung gefunden
+
+Der vierte und letzte Fall derselben Ursache — bis zum Umbau nur latent, weil noch niemand
+mit fixierten Spalten eine Mehrfachauswahl getroffen hatte. `visibleCols()` zieht fixierte
+Spalten nach vorn, `c1..c2` blieb aber Index-Reihenfolge:
+
+```
+Spalten A B C D, C ist fixiert  →  Anzeige: C A B D
+Gewählt: die zwei ERSTEN angezeigten Spalten (C und A)
+Ergebnis: A B C          ← B ist mit drin, C und A stehen falsch herum
+```
+
+Das traf auch das Kopieren: `getSelectionAsMatrix` lieferte Spalten in Index- statt in
+Anzeigereihenfolge, sodass eine kopierte Zeile anders aussah als auf dem Schirm.
+
+**Behoben:** durch den Umbau des Auswahlmodells (siehe unten) — die Spaltenachse ist jetzt
+selbst eine Anzeigeposition.
+
+---
+
+## 3a. Umbau des Auswahlmodells (V0.7)
+
+Sechs der neunzehn Befunde (01–03, 16–19) hatten dieselbe Ursache: Die Auswahl war ein
+Rechteck über *Roh-Indizes*, während der Nutzer über *Angezeigtes* zieht. Vier
+Anzeige-Eigenschaften brachten beides auseinander:
+
+| Anzeige-Eigenschaft | Wirkung auf `r1..r2` / `c1..c2` | Befund |
+|---|---|---|
+| Filter blendet Zeilen aus | Bereich enthält unsichtbare Zeilen | 01, 02, 03 |
+| Sortierung ändert die Reihenfolge | „unterhalb" stimmt nicht mehr | 18 |
+| Spalten ausgeblendet | Bereich enthält unsichtbare Spalten | 16, 17 |
+| Spalten fixiert (`pinned` zuerst) | Bereich ist auf dem Schirm nicht zusammenhängend | 19 |
+
+Jeder Befund wurde einzeln geflickt, indem die auswertende Stelle gegen `visibleIndices`
+bzw. `hidden` schnitt. Das ist Symptombehandlung: Die nächste neue Funktion, die die
+Auswahl anfasst, erbt den Fehler erneut.
+
+**Der Umbau** verlegt die Auswahl in Anzeigekoordinaten:
+
+```js
+appState.selection = { type, v1, k1, v2, k2, anchorV, anchorK }
+//  v = Position in appState.viewRows   — Filter, Sortierung, Gruppierung eingerechnet
+//  k = Position in visibleCols()       — ausgeblendete und fixierte Spalten eingerechnet
+```
+
+Damit ist die gespeicherte Auswahl per Konstruktion das, was der Nutzer umrandet sieht;
+die vier Abweichungen können nicht mehr entstehen. Roh-Indizes gibt es weiterhin — aber nur
+an den Rändern (DOM-Attribute, Datenoperationen), und die Umrechnung liegt an genau einer
+Stelle: `posOfRow`/`rowAtPos`, `posOfCol`/`colAtPos`.
+
+Nebeneffekte, die dabei herausfielen:
+
+- Das Rendering wurde **einfacher**: `buildRowHTML` bekommt die Zeilenposition ohnehin
+  gereicht und die Spaltenschleife läuft ohnehin über Anzeigepositionen — der Auswahltest
+  ist jetzt ein reiner Bereichsvergleich ohne Umrechnung.
+- Pfeiltasten bewegen sich in Anzeigereihenfolge: Pfeil-rechts geht zur Spalte rechts
+  daneben, auch wenn dort eine fixierte Spalte steht.
+- Einfügen schreibt Spalten in Anzeigereihenfolge — passend dazu, wie Kopieren sie liest.
+
+**Preis:** Positionen sind nicht datenstabil. Ändert sich die Sortierung, bleibt die Auswahl
+an ihrer Bildschirmstelle stehen und umfasst danach andere Zeilen. Das entspricht dem
+Verhalten von Excel und ist die bewusste Entscheidung; `clampSelection()` stutzt die
+Positionen nach jedem Neuaufbau des Render-Plans auf den gültigen Bereich.
+`appState.active` bleibt ein Roh-Index, damit der Bearbeitungscursor an seiner Zelle klebt.
+
+**Zusätzlich dabei gefunden:** Ein offener Zelleditor blockierte `renderVirtual` auch über
+das Laden einer neuen Datei hinweg — die App blieb dann mit leerem Raster stehen.
+`loadCSVText` und `newEmpty` setzen `editingCell` jetzt zurück.
+
+---
+
 ## 4. Vorschläge für die Weiterentwicklung
 
 Die Roadmap der Spezifikation ist gut gefüllt. Die folgenden Punkte standen bewusst davor, weil
@@ -451,6 +524,6 @@ npm test                        # = node tools/befunde-repro.mjs
 Das Skript startet Chromium, lädt `index.html` per `file://`, ruft die globalen Funktionen der App
 direkt auf und prüft jeden Befund einzeln. Ausgabe: eine Zeile pro Befund mit Messwerten.
 
-Erwartung: **26 bestanden, 0 auffällig.** Ein `FAIL` bedeutet, dass ein behobener Befund wieder
+Erwartung: **32 bestanden, 0 auffällig.** Ein `FAIL` bedeutet, dass ein behobener Befund wieder
 eingebaut wurde. Die Messwerte in diesem Dokument stammen aus diesem Skript; wer sie zitiert,
 sollte sie vorher neu erheben — sie schwanken je nach Maschine um etwa ±50 %.

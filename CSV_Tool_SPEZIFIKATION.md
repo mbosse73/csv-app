@@ -1,6 +1,6 @@
 # CSV-Tool — Spezifikation
 
-**Version:** V0.6.1
+**Version:** V0.7
 **Stand:** 2026-08-11
 **Architektur:** Single-File HTML/CSS/JS, offline, ohne Build-Schritt, ohne externe Abhängigkeiten
 
@@ -113,7 +113,8 @@ appState = {
     decimals: Number,              // NEU: Nachkommastellen der Spalte (0..6)
     filter: null | { kind:'values', excluded: String[] } | { kind:'range', min, max }
   }],
-  selection, active, clipboard,
+  selection: { type, v1, k1, v2, k2, anchorV, anchorK },  // V0.7: Anzeigepositionen
+  active, clipboard,
   search: { hits, current, query, onlyHits },   // onlyHits NEU
   history: { past:Command[], future:Command[] },
   frozenRows: Number,              // NEU: 0..20
@@ -129,10 +130,13 @@ appState = {
 Auswertung hält `excludedSet()` pro Filterobjekt ein `Set` in einer `WeakMap` vor.
 Filterobjekte werden nie mutiert, sondern ersetzt.
 
-**Auswahl:** `selection` ist ein Rechteck über *Roh-Indizes*. Jede auswertende Stelle muss
-`selectedVisibleRows()` bzw. `selectedVisibleCols()` benutzen — direkt über `r1..r2` oder
-`c1..c2` zu iterieren greift auf ausgefilterte Zeilen und ausgeblendete Spalten zu, die der
-Nutzer nicht sieht.
+**Auswahl (V0.7):** `selection = { type, v1, k1, v2, k2, anchorV, anchorK }` — `v` sind
+Positionen in `viewRows`, `k` Positionen in `visibleCols()`. Beide Achsen sind damit
+Anzeigekoordinaten: Filter, Sortierung, Gruppierung sowie ausgeblendete und fixierte Spalten
+sind eingerechnet. Auswertung über `selectedVisibleRows()` / `selectedVisibleCols()`, die
+Roh-Indizes in Anzeigereihenfolge liefern. Positionen sind **nicht datenstabil** — beim
+Sortieren bleibt die Auswahl an ihrer Bildschirmstelle (`clampSelection()`).
+`active` bleibt ein Roh-Index.
 
 **Befehlstypen der Historie:** `batch`, `editCells`, `addRows`, `delRows`, `moveRow`,
 `addCol`, `delCols`, `moveCol`, `renameHeader`, `colMeta`, `colFilter`. `batch` bündelt

@@ -49,24 +49,49 @@ Aufgebaut wird die Kette von `rebuildVisible()` → `buildViewRows()`. Nach **je
 
 ### Die wichtigste Regel
 
-> **Auswahlbereiche sind Rechtecke über Roh-Indizes (`r1..r2`), nicht Mengen sichtbarer Zeilen.**
-
-Wer die Auswahl auswertet, **muss** über die Hilfsfunktionen gehen — sonst werden ausgefilterte
-Zeilen oder ausgeblendete Spalten mitgelesen oder mitgeschrieben
-(→ Befunde 01–03, 16 und 17 in `ANALYSE.md`):
+> **Die Auswahl wird in Anzeigepositionen geführt, nicht in Roh-Indizes.**
 
 ```js
-const sel  = normalizedSel();
-const rows = selectedVisibleRows(sel);   // schneidet gegen visibleIndices
-const cols = selectedVisibleCols(sel);   // lässt hidden-Spalten weg
+appState.selection = { type, v1, k1, v2, k2, anchorV, anchorK }
+//  v = Position in appState.viewRows   (Zeilenachse)
+//  k = Position in visibleCols()       (Spaltenachse)
 ```
 
-Niemals `for (let r = sel.r1; r <= sel.r2; r++)` oder `for (let c = sel.c1; c <= sel.c2; c++)`.
-Das ist der Fehler, den dieses Projekt schon sechsmal hatte — zuletzt in `deleteSelectedCols`
-(traf ausgeblendete **Spalten**) und in `commitAutoFill` (rechnete bei aktiver Sortierung in
-Roh-Indizes statt in **Anzeigereihenfolge** und überschrieb Zeilen außerhalb des Zugbereichs).
-Wo die Anzeige*reihenfolge* zählt und nicht nur die Zugehörigkeit, ist `viewRows` die
-Bezugsgröße — siehe `autoFillRanges()`.
+Beide Achsen sind damit genau das, was der Nutzer umrandet sieht: Filter, Sortierung,
+Gruppierung sowie ausgeblendete und fixierte Spalten sind bereits eingerechnet. Wer die
+Auswahl auswertet, holt sich **Roh-Indizes in Anzeigereihenfolge**:
+
+```js
+const rows = selectedVisibleRows();   // rIdx[] — Gruppenköpfe fallen raus
+const cols = selectedVisibleCols();   // ci[]   — fixierte Spalten zuerst
+```
+
+Umgerechnet wird nur an den Rändern — das DOM trägt Roh-Indizes in `data-r`/`data-c`,
+Datenoperationen brauchen sie:
+
+| von → nach | Funktion |
+|---|---|
+| Roh-Zeile → Position | `posOfRow(r)` (O(1) über die Index-Karte) |
+| Position → Roh-Zeile | `rowAtPos(v)` |
+| Roh-Spalte → Position | `posOfCol(c)` |
+| Position → Roh-Spalte | `colAtPos(k)` |
+
+Drei Regeln dazu:
+
+- **Positionen sind nicht datenstabil.** Nach `buildViewRows()` stutzt `clampSelection()` sie
+  auf den gültigen Bereich. Wie in Excel bleibt die Auswahl beim Sortieren an ihrer
+  Bildschirmstelle stehen und umfasst danach andere Zeilen. Wer Datenstabilität braucht,
+  merkt sich Roh-Indizes selbst.
+- **`appState.active` ist bewusst ein Roh-Index.** Der Bearbeitungscursor klebt an seiner
+  Zelle, auch wenn sich die Sortierung darunter ändert.
+- **`setSelection(type, r1, c1, r2, c2, …)` nimmt weiter Roh-Indizes** und rechnet um —
+  bequem für Aufrufer, die ohnehin Roh-Indizes haben (Suche, Einfügen). Wer schon in
+  Positionen denkt, nimmt `setSelectionByPos(…)`.
+
+Vor dem Umbau war die Auswahl ein Rechteck über Roh-Indizes. Jede der vier Anzeige-
+Eigenschaften brachte „gemeint" und „gespeichert" auseinander — das hat dieses Projekt
+**sechs** Befunde gekostet (01–03, 16–19 in `ANALYSE.md`). Wer wieder anfängt, mit
+`for (let r = sel.r1; r <= sel.r2; r++)` zu rechnen, baut sie zurück.
 
 ### Zustandsänderungen laufen über die History
 
@@ -112,15 +137,16 @@ Es gibt kein Testframework. Geprüft wird, indem ein echter Browser die App fern
 legt ihren Zustand und ihre Funktionen global ab, deshalb genügt `page.evaluate()`.
 
 ```bash
-npm test                  # 26 Prüfungen, alle müssen OK sein
+npm test                  # 32 Prüfungen, alle müssen OK sein
 npm run shot              # Screenshot nach tools/out/app.png
 node tools/screenshot.mjs --theme dark --rows 5000 --frozen 20 --rowh 20 --scroll 20000
 ```
 
-**Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Die Suite deckt die 18 behobenen
+**Nach jeder inhaltlichen Änderung `npm test` laufen lassen.** Die Suite deckt die 19 behobenen
 Befunde plus Gegenproben ab (XLSX, Undo, `batch`-Undo, XSS-Escaping, AutoFill, Zelleditor,
-Listener-Anhäufung, Suche, Neu-Einlesen, Zahlenparser). Ein `FAIL` heißt: ein behobener Befund
-ist zurück. Neue Funktionen brauchen dort eine neue Prüfung.
+Listener-Anhäufung, Suche, Neu-Einlesen, Zahlenparser) und fährt am Ende echte Mausaktionen
+(Klick, Ziehen, Doppelklick, Rechtsklick). Ein `FAIL` heißt: ein behobener Befund ist zurück.
+Neue Funktionen brauchen dort eine neue Prüfung.
 
 Für eine neue Prüfung: `.claude/skills/browser-repro/SKILL.md` enthält das Muster.
 Bei sichtbaren Änderungen zusätzlich einen Screenshot machen und anschauen.
@@ -132,7 +158,7 @@ Binary unter `/opt/pw-browsers/chromium` aus — Tests laufen also auch nach ein
 
 ## Befunde und nächste Schritte
 
-`ANALYSE.md` ist das Befundprotokoll: 18 Befunde mit Fundstelle, Messwert, Lösungsansatz und
+`ANALYSE.md` ist das Befundprotokoll: 19 Befunde mit Fundstelle, Messwert, Lösungsansatz und
 umgesetzter Lösung. **Alle sind behoben** (V0.6.1) — das Dokument bleibt als Begründung dafür
 erhalten, warum bestimmte Stellen so aussehen, wie sie aussehen. Abschnitt 4 listet die noch
 offenen Weiterentwicklungsvorschläge, die lohnendsten zuerst:

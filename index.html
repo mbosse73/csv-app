@@ -802,6 +802,7 @@ function loadCSVText(text, fileName, fileSize, quiet=false) {
   if (useHeader) { appState.headers = parsed[0].map((h,i) => h.trim() || `Spalte ${i+1}`); appState.rows = parsed.slice(1); }
   else { appState.headers = parsed[0].map((_,i) => `Spalte ${i+1}`); appState.rows = parsed; }
   appState.fileName = fileName; appState.fileSize = fileSize; appState.rawText = text;
+  editingCell = null;   // offener Editor gehört zur alten Datei
   appState.cols = appState.headers.map(() => ({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, filter:null }));
   appState.sort = { col:-1, dir:0 }; appState.filter = '';
   appState.selection = null; appState.active = { r:0, c:0 };
@@ -933,6 +934,7 @@ function buildViewRows() {
   if (gb == null || gb < 0 || gb >= appState.headers.length) {
     for (const r of appState.visibleIndices) vr.push({ kind:'data', rIdx:r });
     appState.viewRows = vr;
+    clampSelection();
     return;
   }
   // Erzwinge Sortierung nach Gruppierungsspalte, wenn nicht schon sortiert
@@ -956,6 +958,7 @@ function buildViewRows() {
     if (!groupBucket.collapsed) vr.push({ kind:'data', rIdx:r, groupKey:key });
   }
   appState.viewRows = vr;
+  clampSelection();
 }
 function findViewRowByData(rIdx) {
   if (!viewIndexCache) {
@@ -980,47 +983,123 @@ function nextDataViewRow(startVk, dir) {
 
 /* =============================================================
    SELECTION
+
+   Die Auswahl wird in ANZEIGEPOSITIONEN geführt, nicht in Roh-Indizes:
+
+     v1..v2   Positionen in appState.viewRows   (Zeilenachse)
+     k1..k2   Positionen in visibleCols()       (Spaltenachse)
+
+   Damit ist die gespeicherte Auswahl genau das, was der Nutzer auf dem Schirm
+   umrandet sieht — Filter, Sortierung, Gruppierung, ausgeblendete und fixierte
+   Spalten sind in beiden Achsen bereits eingerechnet. Vorher war die Auswahl ein
+   Rechteck über Roh-Indizes; jede dieser vier Anzeige-Eigenschaften brachte
+   „gemeint" und „gespeichert" auseinander (Befunde 01–03, 16–18).
+
+   Roh-Indizes gibt es weiterhin — aber nur an den Rändern: das DOM trägt sie in
+   data-r/data-c, und alle Datenoperationen brauchen sie. Die Umrechnung findet an
+   genau einer Stelle statt (posOfRow/posOfCol bzw. rowAtPos/colAtPos).
+
+   appState.active bleibt bewusst ein ROH-Index: der Bearbeitungscursor soll an
+   seiner Zelle kleben, auch wenn sich die Sortierung darunter ändert.
    ============================================================= */
-function normalizedSel() { const s = appState.selection; if (!s) return null; return { type:s.type, r1:Math.min(s.r1,s.r2), r2:Math.max(s.r1,s.r2), c1:Math.min(s.c1,s.c2), c2:Math.max(s.c1,s.c2) }; }
-function setSelection(type, r1, c1, r2, c2, ar, ac) { appState.selection = { type, r1, c1, r2, c2, anchorR: ar ?? r1, anchorC: ac ?? c1 }; }
+
+/** Spalten in Anzeigereihenfolge (fixierte zuerst) — Umrechnung Index ↔ Position. */
+function colAtPos(k) { const list = visibleCols(); return k >= 0 && k < list.length ? list[k].ci : -1; }
+function posOfCol(ci) { const list = visibleCols(); for (let k=0; k<list.length; k++) if (list[k].ci === ci) return k; return -1; }
+function colCount() { return visibleCols().length; }
+
+/** Zeilen: Position im Render-Plan ↔ Roh-Index. */
+function rowAtPos(v) { const vr = appState.viewRows; return (v >= 0 && v < vr.length && vr[v].kind === 'data') ? vr[v].rIdx : -1; }
+function posOfRow(rIdx) { return findViewRowByData(rIdx); }
+
+function normalizedSel() {
+  const s = appState.selection;
+  if (!s) return null;
+  return { type:s.type, v1:Math.min(s.v1,s.v2), v2:Math.max(s.v1,s.v2), k1:Math.min(s.k1,s.k2), k2:Math.max(s.k1,s.k2) };
+}
+/** Setzt die Auswahl direkt über Anzeigepositionen. */
+function setSelectionByPos(type, v1, k1, v2, k2, av, ak) {
+  appState.selection = { type, v1, k1, v2, k2, anchorV: av ?? v1, anchorK: ak ?? k1 };
+}
+/**
+ * Bequemlichkeits-Variante mit ROH-Indizes; rechnet auf Positionen um.
+ * Zeilen, die gerade nicht im Render-Plan stehen, lassen sich nicht auswählen —
+ * das ist der Punkt der Umstellung, kein Verlust.
+ */
+function setSelection(type, r1, c1, r2, c2, ar, ac) {
+  const v1 = posOfRow(r1), v2 = posOfRow(r2);
+  const k1 = posOfCol(c1), k2 = posOfCol(c2);
+  if (v1 < 0 || v2 < 0 || k1 < 0 || k2 < 0) { appState.selection = null; return; }
+  const av = ar == null ? v1 : posOfRow(ar);
+  const ak = ac == null ? k1 : posOfCol(ac);
+  setSelectionByPos(type, v1, k1, v2, k2, av < 0 ? v1 : av, ak < 0 ? k1 : ak);
+}
 function selectCell(r, c) { appState.active = {r,c}; setSelection('cells', r,c,r,c); updateSelectionDOM(); }
 function selectRange(r1,c1,r2,c2) { setSelection('cells', r1,c1,r2,c2, r1,c1); appState.active = {r:r1,c:c1}; updateSelectionDOM(); }
-function selectRow(ri) { setSelection('rows', ri, 0, ri, appState.headers.length-1, ri, 0); appState.active = {r:ri,c:0}; updateSelectionDOM(); }
-function selectCol(ci) { setSelection('cols', 0, ci, Math.max(0, appState.rows.length-1), ci, 0, ci); appState.active = {r:0,c:ci}; updateSelectionDOM(); }
-function isCellSelected(r,c) { const s = normalizedSel(); if (!s) return false; if (appState.selection.type === 'rows') return r>=s.r1 && r<=s.r2; if (appState.selection.type === 'cols') return c>=s.c1 && c<=s.c2; return r>=s.r1 && r<=s.r2 && c>=s.c1 && c<=s.c2; }
+function selectRow(ri) {
+  const v = posOfRow(ri); if (v < 0) return;
+  setSelectionByPos('rows', v, 0, v, Math.max(0, colCount()-1), v, 0);
+  appState.active = {r:ri, c:colAtPos(0)}; updateSelectionDOM();
+}
+function selectCol(ci) {
+  const k = posOfCol(ci); if (k < 0) return;
+  setSelectionByPos('cols', 0, k, Math.max(0, appState.viewRows.length-1), k, 0, k);
+  const erste = firstDataViewRow();
+  appState.active = {r: erste >= 0 ? appState.viewRows[erste].rIdx : 0, c:ci};
+  updateSelectionDOM();
+}
+function isCellSelected(r, c) {
+  const s = normalizedSel(); if (!s) return false;
+  const v = posOfRow(r), k = posOfCol(c);
+  if (v < 0 || k < 0) return false;
+  if (s.type === 'rows') return v >= s.v1 && v <= s.v2;
+  if (s.type === 'cols') return k >= s.k1 && k <= s.k2;
+  return v >= s.v1 && v <= s.v2 && k >= s.k1 && k <= s.k2;
+}
 
 /* -------------------------------------------------------------
    Auswahl auswerten
 
-   Auswahlbereiche sind Rechtecke über ROH-Indizes (r1..r2), nicht Mengen
-   sichtbarer Zeilen. Wer die Auswahl liest oder beschreibt, MUSS deshalb über
-   selectedVisibleRows() gehen — sonst greift die Aktion auf ausgefilterte
-   Zeilen zu, die der Nutzer gar nicht sieht (Befunde 01–03).
+   Beide Funktionen liefern ROH-Indizes in ANZEIGEREIHENFOLGE. Wer die Auswahl
+   liest oder beschreibt, geht über sie — dann stimmen Menge und Reihenfolge
+   automatisch mit dem überein, was der Nutzer umrandet hat.
    ------------------------------------------------------------- */
 function selectedVisibleRows(sel) {
   const s = sel || normalizedSel();
   if (!s) return [];
-  // Einzelzeile: kein Scan über visibleIndices nötig, der Set-Lookup genügt.
-  if (s.r1 === s.r2) return isRowVisible(s.r1) ? [s.r1] : [];
-  return appState.visibleIndices.filter(r => r >= s.r1 && r <= s.r2);
+  const vr = appState.viewRows, out = [];
+  const bis = Math.min(s.v2, vr.length - 1);
+  for (let v = Math.max(0, s.v1); v <= bis; v++) if (vr[v].kind === 'data') out.push(vr[v].rIdx);
+  return out;
 }
-/** Sichtbare (nicht ausgeblendete) Spalten der Auswahl in Originalreihenfolge. */
 function selectedVisibleCols(sel) {
   const s = sel || normalizedSel();
   if (!s) return [];
-  const out = [];
-  for (let c = s.c1; c <= s.c2; c++) if (appState.cols[c] && !appState.cols[c].hidden) out.push(c);
+  const list = visibleCols(), out = [];
+  const bis = Math.min(s.k2, list.length - 1);
+  for (let k = Math.max(0, s.k1); k <= bis; k++) out.push(list[k].ci);
   return out;
 }
-/** Strg+A — die Hilfe verspricht „nur sichtbare Zeilen", also auch nur die. */
+/** Strg+A — alles, was gerade dargestellt wird. */
 function selectAllVisible() {
-  const vis = appState.visibleIndices;
-  if (!vis.length) return;
-  let first = vis[0], last = vis[0];
-  for (const r of vis) { if (r < first) first = r; if (r > last) last = r; }
-  setSelection('cells', first, 0, last, appState.headers.length-1, first, 0);
-  appState.active = { r:first, c:0 };
+  const nV = appState.viewRows.length, nK = colCount();
+  if (!nV || !nK) return;
+  setSelectionByPos('cells', 0, 0, nV-1, nK-1, 0, 0);
+  const erste = firstDataViewRow();
+  if (erste >= 0) appState.active = { r: appState.viewRows[erste].rIdx, c: colAtPos(0) };
   updateSelectionDOM();
+}
+/**
+ * Nach jedem Neuaufbau des Render-Plans: Auswahl auf den gültigen Bereich stutzen.
+ * Positionen sind bewusst NICHT datenstabil — wie in Excel bleibt die Auswahl beim
+ * Sortieren an ihrer Bildschirmstelle stehen und umfasst danach andere Zeilen.
+ */
+function clampSelection() {
+  const s = appState.selection; if (!s) return;
+  const maxV = appState.viewRows.length - 1, maxK = colCount() - 1;
+  if (maxV < 0 || maxK < 0) { appState.selection = null; return; }
+  for (const f of ['v1','v2','anchorV']) s[f] = Math.max(0, Math.min(maxV, s[f]));
+  for (const f of ['k1','k2','anchorK']) s[f] = Math.max(0, Math.min(maxK, s[f]));
 }
 
 /* =============================================================
@@ -1075,7 +1154,7 @@ function renderHeader() {
   for (let k=0; k<cols.length; k++) {
     const { ci, width, pinned } = cols[k];
     const ind = appState.sort.col === ci ? (appState.sort.dir===1?'▲':appState.sort.dir===-1?'▼':'') : '';
-    const selCol = (selType === 'cols' || selType === 'cells') && sel && sel.c1 <= ci && ci <= sel.c2 && selType !== 'rows';
+    const selCol = (selType === 'cols' || selType === 'cells') && sel && sel.k1 <= k && k <= sel.k2;
     const pinStyle = pinned ? `position:sticky; left:${offs[ci]}px; z-index:7;` : '';
     const nextOrig = ci + 1;
     const hidAfter = nextOrig < appState.cols.length && appState.cols[nextOrig].hidden;
@@ -1094,7 +1173,11 @@ function renderHeader() {
   bindHeaderEvents();
 }
 
-function buildRowHTML(vk, viewRow, ctx) {
+/**
+ * @param vk    Position im gerenderten Block (bestimmt nur das top-Offset)
+ * @param vAbs  Position in appState.viewRows (maßgeblich für die Auswahl)
+ */
+function buildRowHTML(vk, viewRow, ctx, vAbs) {
   const { cols, offs, totalW, sel, selType, searchSet, searchCur, colTypes, colDecimals } = ctx;
   if (viewRow.kind === 'group') {
     const caret = viewRow.collapsed ? '▶' : '▼';
@@ -1113,7 +1196,7 @@ function buildRowHTML(vk, viewRow, ctx) {
   const ri = viewRow.rIdx;
   const row = appState.rows[ri];
   const top = vk * ROW_H;
-  const rowSelected = sel && selType === 'rows' && ri >= sel.r1 && ri <= sel.r2;
+  const rowSelected = sel && selType === 'rows' && vAbs >= sel.v1 && vAbs <= sel.v2;
   const altClass = vk % 2 === 1 ? 'alt' : '';
   let html = `<div class="grid-row ${altClass} ${rowSelected?'row-selected':''}" style="top:${top}px; width:${totalW}px" data-row="${ri}">`;
   html += `<div class="gcell row-idx" style="width:${ROW_IDX_W}px; left:0; position:sticky; z-index:4;" data-rix="${ri}" draggable="true" title="Klick: Zeile wählen · Ziehen: verschieben">${(ri+1).toLocaleString('de-DE')}</div>`;
@@ -1125,9 +1208,10 @@ function buildRowHTML(vk, viewRow, ctx) {
     let cls = `gcell t-${t}`;
     if (sel) {
       let isS = false;
-      if (selType === 'cells') isS = ri>=sel.r1 && ri<=sel.r2 && ci>=sel.c1 && ci<=sel.c2;
-      else if (selType === 'rows') isS = ri>=sel.r1 && ri<=sel.r2;
-      else if (selType === 'cols') isS = ci>=sel.c1 && ci<=sel.c2;
+      // ck ist bereits die Anzeigeposition der Spalte, vAbs die der Zeile.
+      if (selType === 'cells') isS = vAbs>=sel.v1 && vAbs<=sel.v2 && ck>=sel.k1 && ck<=sel.k2;
+      else if (selType === 'rows') isS = vAbs>=sel.v1 && vAbs<=sel.v2;
+      else if (selType === 'cols') isS = ck>=sel.k1 && ck<=sel.k2;
       if (isS) cls += ' selected';
     }
     if (appState.active.r === ri && appState.active.c === ci) cls += ' active';
@@ -1176,7 +1260,7 @@ function renderVirtual() {
     frozenHost.style.width = totalW + 'px';
     let fhtml = '';
     for (let k = 0; k < frozenN; k++) {
-      fhtml += buildRowHTML(k, viewRows[k], ctx);
+      fhtml += buildRowHTML(k, viewRows[k], ctx, k);
     }
     frozenHost.innerHTML = fhtml;
   } else {
@@ -1207,8 +1291,8 @@ function renderVirtual() {
   let html = '';
   for (let k = firstVisible; k <= lastVisible; k++) {
     if (k < 0 || k >= totalVirtualRows) continue;
-    const viewRow = viewRows[virtualRowStart + k];
-    html += buildRowHTML(k, viewRow, ctx);
+    const vAbs = virtualRowStart + k;
+    html += buildRowHTML(k, viewRows[vAbs], ctx, vAbs);
   }
   rowsHost.innerHTML = html;
   placeFillHandle();
@@ -1277,9 +1361,9 @@ function bindGridEvents() {
       e.stopPropagation();
       const ri = +idx.dataset.rix;
       if (e.shiftKey && appState.selection?.type === 'rows') {
-        const a = appState.selection.anchorR;
-        setSelection('rows', Math.min(a,ri), 0, Math.max(a,ri), appState.headers.length-1, a, 0);
-        appState.active = {r:ri,c:0}; updateSelectionDOM();
+        const a = appState.selection.anchorV;
+        const v = posOfRow(ri);
+        if (v >= 0) { setSelectionByPos('rows', Math.min(a,v), 0, Math.max(a,v), Math.max(0, colCount()-1), a, 0); appState.active = {r:ri,c:colAtPos(0)}; updateSelectionDOM(); }
       } else selectRow(ri);
     });
 
@@ -1309,9 +1393,9 @@ function bindGridEvents() {
       if (e.button === 2) { if (!isCellSelected(r,c)) selectCell(r,c); return; }
       if (e.shiftKey && appState.selection) {
         const a = appState.selection;
-        setSelection('cells', a.anchorR, a.anchorC, r, c, a.anchorR, a.anchorC);
-        appState.active = {r,c}; updateSelectionDOM();
-      } else { selectCell(r,c); dragSelect = { startR:r, startC:c }; }
+        const v = posOfRow(r), k = posOfCol(c);
+        if (v >= 0 && k >= 0) { setSelectionByPos('cells', a.anchorV, a.anchorK, v, k, a.anchorV, a.anchorK); appState.active = {r,c}; updateSelectionDOM(); }
+      } else { selectCell(r,c); dragSelect = { v: posOfRow(r), k: posOfCol(c) }; }
     });
 
     // mouseenter steigt nicht auf — mouseover schon, und Zellen haben keine Kindelemente.
@@ -1321,8 +1405,10 @@ function bindGridEvents() {
       if (!td || td === hoverCell) return;
       hoverCell = td;
       const r = +td.dataset.r, c = +td.dataset.c;
-      if (autoFillOp) { autoFillOp.currentR = r; showAutoFillPreview(); return; }
-      setSelection('cells', dragSelect.startR, dragSelect.startC, r, c, dragSelect.startR, dragSelect.startC);
+      if (autoFillOp) { const v = posOfRow(r); if (v >= 0) { autoFillOp.currentV = v; showAutoFillPreview(); } return; }
+      const v = posOfRow(r), k = posOfCol(c);
+      if (v < 0 || k < 0) return;
+      setSelectionByPos('cells', dragSelect.v, dragSelect.k, v, k, dragSelect.v, dragSelect.k);
       appState.active = {r,c}; updateSelectionDOM();
     });
 
@@ -1400,7 +1486,7 @@ function updateStatus() {
   let label = '';
   if (appState.selection.type === 'rows') label = `${nR} Zeile${nR===1?'':'n'}`;
   else if (appState.selection.type === 'cols') label = `${nC} Spalte${nC===1?'':'n'}`;
-  else label = (nR===1&&nC===1) ? `Zelle R${sel.r1+1}, C${sel.c1+1}` : `${nR}×${nC} Zellen`;
+  else label = (nR===1&&nC===1) ? `Zelle R${selRows[0]+1}, C${selCols[0]+1}` : `${nR}×${nC} Zellen`;
   document.getElementById('stat-sel').textContent = `Auswahl: ${label}`;
   if (nR * nC > 1 && nR * nC < 100000) {
     let sum = 0, count = 0;
@@ -1457,10 +1543,10 @@ function moveActive(dr, dc, extend=false) {
   // Bewegt sich im Render-Plan (überspringt eingeklappte Gruppen und Gruppenköpfe).
   // Die Position wird über die Index-Karte aus buildViewRows() gefunden — ein linearer
   // Scan pro Tastendruck ist bei Hunderttausenden Zeilen zu langsam (Befund 07).
-  const visCols = appState.cols.map((c,i)=>({i,c})).filter(x=>!x.c.hidden).map(x=>x.i);
-  if (!visCols.length) return;
+  const nCols = colCount();
+  if (!nCols) return;
   const { r, c } = appState.active;
-  let vk = findViewRowByData(r);
+  let vk = posOfRow(r);
   if (vk < 0) vk = firstDataViewRow();
   if (vk < 0) return;
   const step = dr < 0 ? -1 : 1;
@@ -1469,17 +1555,23 @@ function moveActive(dr, dc, extend=false) {
     if (next === vk) break;     // Anfang bzw. Ende der Tabelle erreicht
     vk = next;
   }
-  let cPos = visCols.indexOf(c);
+  // Die Spaltenachse folgt der Anzeigereihenfolge — Pfeil-rechts geht zur Spalte
+  // rechts daneben, auch wenn dort eine fixierte Spalte steht.
+  let cPos = posOfCol(c);
   if (cPos < 0) cPos = 0;
-  const ncPos = Math.max(0, Math.min(visCols.length-1, cPos + dc));
-  const nr = appState.viewRows[vk].rIdx, nc = visCols[ncPos];
-  if (extend && appState.selection) { const a = appState.selection; setSelection('cells', a.anchorR, a.anchorC, nr, nc, a.anchorR, a.anchorC); appState.active = {r:nr,c:nc}; updateSelectionDOM(); }
+  const ncPos = Math.max(0, Math.min(nCols-1, cPos + dc));
+  const nr = appState.viewRows[vk].rIdx, nc = colAtPos(ncPos);
+  if (extend && appState.selection) {
+    const a = appState.selection;
+    setSelectionByPos('cells', a.anchorV, a.anchorK, vk, ncPos, a.anchorV, a.anchorK);
+    appState.active = {r:nr,c:nc}; updateSelectionDOM();
+  }
   else selectCell(nr, nc);
   scrollIntoView(nr, nc);
 }
 function scrollIntoView(r, c) {
   const scroller = document.getElementById('grid-scroller');
-  const vk = findViewRowByData(r); if (vk < 0) return;
+  const vk = posOfRow(r); if (vk < 0) return;
   // Frozen rows kleben ohnehin oben — kein Scroll nötig
   if (vk < appState.frozenRows) {
     // horizontal scroll ggf. anpassen (unten)
@@ -1505,8 +1597,8 @@ function scrollIntoView(r, c) {
 function getSelectionAsMatrix() {
   const sel = normalizedSel(); if (!sel) return null;
   const rRange = selectedVisibleRows(sel);
-  const cRange = appState.selection.type === 'rows'
-    ? appState.cols.map((c,i)=>i).filter(i => !appState.cols[i].hidden)
+  const cRange = sel.type === 'rows'
+    ? visibleCols().map(c => c.ci)
     : selectedVisibleCols(sel);
   const data = rRange.map(r => cRange.map(c => appState.rows[r][c] ?? ''));
   return { data, rRange, cRange };
@@ -1536,7 +1628,10 @@ function doCopy(cut=false) {
 function doPaste(text) {
   const data = parseTSV(text); if (!data.length) return;
   const startR = appState.active.r, startC = appState.active.c;
-  const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden && i>=startC);
+  // Zielspalten in ANZEIGEreihenfolge ab der aktiven Spalte — beim Kopieren wurde
+  // in derselben Reihenfolge gelesen, sonst landen die Werte in falschen Spalten.
+  const startK = Math.max(0, posOfCol(startC));
+  const visC = visibleCols().slice(startK).map(c => c.ci);
   const visR = appState.visibleIndices;
   const rPos = visR.indexOf(startR); if (rPos < 0) return;
   // Alle Teilschritte (neue Spalten, neue Zeilen, Werte) werden gesammelt und als
@@ -1647,34 +1742,31 @@ function autoFitColumn(ci) {
 /* =============================================================
    AUTOFILL
    ============================================================= */
-function startAutoFill(e) { e.preventDefault(); e.stopPropagation(); const sel = normalizedSel(); if (!sel) return; autoFillOp = { startSel: {...sel}, currentR: sel.r2 }; document.body.style.cursor = 'crosshair'; }
+function startAutoFill(e) { e.preventDefault(); e.stopPropagation(); const sel = normalizedSel(); if (!sel) return; autoFillOp = { startSel: {...sel}, currentV: sel.v2 }; document.body.style.cursor = 'crosshair'; }
 
 /**
  * Quell- und Zielzeilen des AutoFill — in **Anzeigereihenfolge**, nicht nach Roh-Index.
  *
- * Der Nutzer zieht über das, was er sieht. `r1..r2` sind aber Roh-Indizes: sobald sortiert
- * ist, stimmt „unterhalb" im Roh-Index nicht mehr mit „unterhalb" auf dem Bildschirm
- * überein. Über die Positionen im Render-Plan gerechnet stimmt beides wieder, und
- * Gruppenköpfe sowie eingeklappte Gruppen fallen automatisch heraus.
+ * Der Nutzer zieht über das, was er sieht — die Auswahl ist bereits in
+ * Anzeigepositionen geführt, Gruppenköpfe und eingeklappte Gruppen fallen beim
+ * Einsammeln automatisch heraus.
  */
-function autoFillRanges(startSel, currentR) {
+function autoFillRanges(startSel, currentV) {
   const vr = appState.viewRows;
-  const a = findViewRowByData(startSel.r1), b = findViewRowByData(startSel.r2), cur = findViewRowByData(currentR);
-  if (a < 0 || b < 0 || cur < 0) return null;
-  const oben = Math.min(a, b), unten = Math.max(a, b);
-  if (cur <= unten) return null;
-  const sammle = (von, bis) => { const out = []; for (let k = von; k <= bis; k++) if (vr[k].kind === 'data') out.push(vr[k].rIdx); return out; };
-  const src = sammle(oben, unten), tgt = sammle(unten + 1, cur);
+  const oben = Math.min(startSel.v1, startSel.v2), unten = Math.max(startSel.v1, startSel.v2);
+  if (currentV <= unten || unten >= vr.length) return null;
+  const sammle = (von, bis) => { const out = []; const ende = Math.min(bis, vr.length-1); for (let k = Math.max(0,von); k <= ende; k++) if (vr[k].kind === 'data') out.push(vr[k].rIdx); return out; };
+  const src = sammle(oben, unten), tgt = sammle(unten + 1, currentV);
   return (src.length && tgt.length) ? { src, tgt } : null;
 }
 
 function showAutoFillPreview() {
   document.querySelectorAll('.fill-preview').forEach(el => el.classList.remove('fill-preview'));
   if (!autoFillOp) return;
-  const { startSel, currentR } = autoFillOp;
+  const { startSel, currentV } = autoFillOp;
   // Dieselben Zeilen und Spalten wie commitAutoFill, damit die Vorschau nicht mehr
   // verspricht, als sie hält.
-  const bereich = autoFillRanges(startSel, currentR);
+  const bereich = autoFillRanges(startSel, currentV);
   if (!bereich) return;
   const cols = selectedVisibleCols(startSel);
   for (const r of bereich.tgt) {
@@ -1684,9 +1776,9 @@ function showAutoFillPreview() {
 function commitAutoFill() {
   document.querySelectorAll('.fill-preview').forEach(el => el.classList.remove('fill-preview'));
   if (!autoFillOp) { document.body.style.cursor=''; return; }
-  const { startSel, currentR } = autoFillOp;
+  const { startSel, currentV } = autoFillOp;
   const fillCols = selectedVisibleCols(startSel);
-  const bereich = autoFillRanges(startSel, currentR);
+  const bereich = autoFillRanges(startSel, currentV);
   if (bereich && fillCols.length) {
     // Nur eingeblendete Spalten füllen; eine ausgeblendete Spalte mitten im Bereich
     // würde sonst unbemerkt überschrieben.
@@ -1720,10 +1812,8 @@ function commitAutoFill() {
       }
     }
     if (changes.length) { pushHistory({ label:'AutoFill', type:'editCells', changes }); for (const ch of changes) appState.rows[ch.r][ch.c] = ch.to; }
-    // Auswahlrechteck über alle betroffenen Roh-Indizes aufspannen (bei Sortierung ist
-    // das nur eine Näherung — die Auswahl bleibt konstruktionsbedingt ein Rechteck).
-    const betroffen = bereich.src.concat(bereich.tgt);
-    setSelection('cells', Math.min(...betroffen), startSel.c1, Math.max(...betroffen), startSel.c2, startSel.r1, startSel.c1);
+    // In Positionen gerechnet ist die neue Auswahl exakt der Zugbereich.
+    setSelectionByPos('cells', Math.min(startSel.v1, startSel.v2), startSel.k1, currentV, startSel.k2, startSel.v1, startSel.k1);
     rebuildVisible(); renderAll();
   }
   autoFillOp = null; document.body.style.cursor = '';
@@ -1746,13 +1836,15 @@ function showContextMenu(x, y, kind) {
   items.push({ label:'Einfügen', sc:'Strg+V', act:()=>pasteFromSys() });
   items.push({ divider:true });
   if (isRows || kind==='row') {
-    items.push({ label:'Zeile darüber einfügen', act:()=>insertRowAt(normalizedSel().r1,'before') });
-    items.push({ label:'Zeile darunter einfügen', act:()=>insertRowAt(normalizedSel().r2,'after') });
+    const selR = selectedVisibleRows();
+    if (selR.length) {
+      items.push({ label:'Zeile darüber einfügen', act:()=>insertRowAt(selR[0],'before') });
+      items.push({ label:'Zeile darunter einfügen', act:()=>insertRowAt(selR[selR.length-1],'after') });
+    }
     items.push({ divider:true });
     // Bis-hier-einfrieren: benutzt die viewRow-Position
-    const sel1 = normalizedSel();
-    const vk = findViewRowByData(sel1.r1);
-    if (vk >= 0) {
+    const vk = normalizedSel().v1;
+    {
       const upTo = vk + 1;
       items.push({ label:`Bis hier einfrieren (${upTo} Zeile${upTo>1?'n':''})`, act:()=>{ appState.frozenRows = Math.min(FROZEN_ROWS_MAX, upTo); renderAll(); } });
     }
@@ -1760,10 +1852,11 @@ function showContextMenu(x, y, kind) {
     items.push({ divider:true });
     items.push({ label:'Zeile(n) löschen', danger:true, act:()=>deleteSelectedRows() });
   } else if (isCols) {
-    const ci = normalizedSel().c1;
+    const selC = selectedVisibleCols();
+    const ci = selC[0];
     const curType = appState.cols[ci].type || 'auto';
     items.push({ label:'Spalte davor einfügen', act:()=>insertColAt(ci,'before') });
-    items.push({ label:'Spalte danach einfügen', act:()=>insertColAt(normalizedSel().c2,'after') });
+    items.push({ label:'Spalte danach einfügen', act:()=>insertColAt(selC[selC.length-1],'after') });
     items.push({ divider:true });
     items.push({ label:`Filter… ${appState.cols[ci].filter?'(aktiv)':''}`.trim(), act:()=>{ const ref = document.querySelector(`[data-filt="${ci}"]`); const r = ref?.getBoundingClientRect(); openFilterPopup(ci, r?.left ?? x, (r?.bottom ?? y) + 4); } });
     if (appState.groupBy === ci) items.push({ label:'Gruppierung aufheben', act:()=>{ appState.groupBy = null; appState.collapsedGroups = new Set(); buildViewRows(); renderAll(); } });
@@ -2098,6 +2191,7 @@ function newEmpty() {
   appState.headers = ['Spalte 1','Spalte 2','Spalte 3'];
   appState.rows = [['','',''], ['','',''], ['','','']];
   appState.rawText = serializeCSV(appState.headers, appState.rows, ',');
+  editingCell = null;
   appState.cols = appState.headers.map(()=>({ width:DEFAULT_COL_WIDTH, hidden:false, pinned:false, type:'auto', detectedType:'text', decimals:0, filter:null }));
   appState.delimiter = ','; appState.sort = { col:-1, dir:0 }; appState.filter = '';
   appState.selection = null; appState.active = {r:0,c:0}; appState.history = { past:[], future:[] }; appState.search = { hits:[], current:-1, query:'', onlyHits:false };
@@ -2763,16 +2857,10 @@ function srScope(opts) {
   const cols = new Set(appState.cols.map((c,i) => c.hidden ? -1 : i).filter(i => i >= 0));
   const sel = normalizedSel();
   if (opts.selOnly && sel) {
-    const rFiltered = new Set();
-    for (const r of rows) if (r >= sel.r1 && r <= sel.r2) rFiltered.add(r);
-    const cFiltered = new Set();
-    for (const c of cols) if (c >= sel.c1 && c <= sel.c2) cFiltered.add(c);
-    return { rows: rFiltered, cols: cFiltered };
+    return { rows: new Set(selectedVisibleRows(sel)), cols: new Set(selectedVisibleCols(sel)) };
   }
   if (opts.colsOnly && sel) {
-    const cFiltered = new Set();
-    for (const c of cols) if (c >= sel.c1 && c <= sel.c2) cFiltered.add(c);
-    return { rows, cols: cFiltered };
+    return { rows, cols: new Set(selectedVisibleCols(sel)) };
   }
   return { rows, cols };
 }
@@ -2960,8 +3048,8 @@ window.addEventListener('keydown', e => {
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAllVisible(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); clearSelectionValues(); }
   else if (e.key === 'F2' || e.key === 'Enter') { e.preventDefault(); beginEditCell(appState.active.r, appState.active.c); }
-  else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const r0 = appState.visibleIndices[0] ?? 0; const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden); selectCell(r0, visC[0]); scrollIntoView(r0, visC[0]); }
-  else if (e.key === 'End' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const rE = appState.visibleIndices[appState.visibleIndices.length-1] ?? 0; const visC = appState.cols.map((c,i)=>i).filter(i=>!appState.cols[i].hidden); selectCell(rE, visC[visC.length-1]); scrollIntoView(rE, visC[visC.length-1]); }
+  else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const v = firstDataViewRow(); if (v >= 0 && colCount()) { const r0 = appState.viewRows[v].rIdx, c0 = colAtPos(0); selectCell(r0, c0); scrollIntoView(r0, c0); } }
+  else if (e.key === 'End' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const vr = appState.viewRows; let v = -1; for (let i = vr.length-1; i >= 0; i--) if (vr[i].kind === 'data') { v = i; break; } if (v >= 0 && colCount()) { const rE = vr[v].rIdx, cE = colAtPos(colCount()-1); selectCell(rE, cE); scrollIntoView(rE, cE); } }
   else if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); const dir = e.key === 'PageDown' ? 1 : -1; const pageRows = Math.max(1, Math.floor((document.getElementById('grid-scroller').clientHeight - 34) / ROW_H) - 1); moveActive(dir * pageRows, 0, e.shiftKey); }
   else if (e.key.startsWith('Arrow')) { e.preventDefault(); const map = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] }; moveActive(...map[e.key], e.shiftKey); }
   else if (e.key === 'Tab') { e.preventDefault(); moveActive(0, e.shiftKey ? -1 : 1); }

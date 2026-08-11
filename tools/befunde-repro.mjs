@@ -271,24 +271,49 @@ const { page, fehler: jsErrors, close } = await openApp();
     rebuildVisible();
     const vis = appState.visibleIndices;
     setSelection('cells', vis[0], 1, vis[0], 1, vis[0], 1);
-    autoFillOp = { startSel: normalizedSel(), currentR: vis[2] };  // über 3 Zeilen ziehen
+    autoFillOp = { startSel: normalizedSel(), currentV: 2 };   // bis zur 3. angezeigten Zeile
     commitAutoFill();
     return appState.visibleIndices.map(i => appState.rows[i][1]).join(' ');
   });
   check('––', 'AutoFill füllt bei Sortierung genau die gezogenen Zeilen', fillSortiert === 'A A A D B',
     `Anzeige nachher: ${fillSortiert} (erwartet: A A A D B)`);
 
+  /* Befund 19: Auswahl folgt der Anzeigereihenfolge, auch bei fixierten Spalten. */
+  const fixiert = await page.evaluate(() => {
+    loadCSVText('A,B,C,D\n1,2,3,4', 'fx.csv', 0);
+    appState.cols[2].pinned = true;      // C wandert nach vorn: Anzeige C A B D
+    renderAll();
+    const anzeige = visibleCols().map(c => appState.headers[c.ci]).join(' ');
+    setSelectionByPos('cols', 0, 0, appState.viewRows.length - 1, 1, 0, 0);  // erste zwei angezeigte
+    const gewaehlt = selectedVisibleCols().map(c => appState.headers[c]).join(' ');
+    return { anzeige, gewaehlt };
+  });
+  check('––', 'Spaltenauswahl folgt der Anzeigereihenfolge', fixiert.gewaehlt === 'C A',
+    `Anzeige: ${fixiert.anzeige} · erste zwei gewählt ergibt: ${fixiert.gewaehlt}`);
+
+  const kopierReihenfolge = await page.evaluate(() => {
+    loadCSVText('A,B,C\n1,2,3', 'kr.csv', 0);
+    appState.cols[2].pinned = true;      // Anzeige: C A B
+    renderAll();
+    selectRow(0);
+    const m = getSelectionAsMatrix();
+    return m.data[0].join(',');
+  });
+  check('––', 'Kopieren folgt der Anzeigereihenfolge der Spalten', kopierReihenfolge === '3,1,2',
+    `kopierte Zeile: ${kopierReihenfolge} (Anzeige C A B)`);
+
   /* Befund 16/17: dieselbe Fehlerklasse wie 01, nur für Spalten statt Zeilen. */
   const fillVersteckt = await page.evaluate(() => {
     loadCSVText('A,Versteckt,C\n1,schutz1,x\n2,schutz2,y\n,schutz3,\n,schutz4,', 'hf.csv', 0);
     appState.cols[1].hidden = true; renderAll();
     setSelection('cells', 0, 0, 1, 2, 0, 0);       // Auswahl spannt über die versteckte Spalte
-    autoFillOp = { startSel: normalizedSel(), currentR: 3 };
+    autoFillOp = { startSel: normalizedSel(), currentV: 3 };
     commitAutoFill();
     return { versteckt: appState.rows.map(r => r[1]).join(','), sichtbar: appState.rows.map(r => r[0]).join(',') };
   });
+  // Die zweite Bedingung verhindert, dass die Prüfung grün wird, weil GAR nichts passiert ist.
   check('––', 'AutoFill überschreibt keine ausgeblendeten Spalten',
-    fillVersteckt.versteckt === 'schutz1,schutz2,schutz3,schutz4',
+    fillVersteckt.versteckt === 'schutz1,schutz2,schutz3,schutz4' && fillVersteckt.sichtbar === '1,2,3,4',
     `versteckte Spalte: ${fillVersteckt.versteckt} · gefüllte Spalte: ${fillVersteckt.sichtbar}`);
 
   const delVersteckt = await page.evaluate(() => {
@@ -317,7 +342,9 @@ const { page, fehler: jsErrors, close } = await openApp();
     selectCell(0, 0);            // plant einen Frame ein
     beginEditCell(1, 1);         // Editor darf davon nicht weggerendert werden
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    return !!document.querySelector('.gcell.editing .editor');
+    const offen = !!document.querySelector('.gcell.editing .editor');
+    const ed = document.querySelector('.gcell.editing .editor'); if (ed) ed.blur();
+    return offen;
   });
   check('––', 'Offener Zelleditor überlebt einen eingeplanten Render', editor, 'sonst schließt sich der Editor sofort wieder');
 
@@ -370,12 +397,47 @@ const { page, fehler: jsErrors, close } = await openApp();
     loadCSVText('Wert,Gruppe\n1,X\n99,Y\n2,X\n99,Y\n0,X\n0,X', 'a.csv', 0);
     appState.cols[1].filter = { kind: 'values', excluded: ['Y'] };
     rebuildVisible();
-    setSelection('cells', 0, 0, 2, 0, 0, 0);
-    autoFillOp = { startSel: normalizedSel(), currentR: 5 };
+    setSelection('cells', 0, 0, 2, 0, 0, 0);      // sichtbare Zeilen roh 0 und 2 → Positionen 0..1
+    autoFillOp = { startSel: normalizedSel(), currentV: 3 };
     commitAutoFill();
-    return appState.rows[1][0] === '99' && appState.rows[3][0] === '99';
+    return {
+      ausgefiltertIntakt: appState.rows[1][0] === '99' && appState.rows[3][0] === '99',
+      gefuellt: appState.rows[4][0] === '3' && appState.rows[5][0] === '4',
+      werte: appState.rows.map(r => r[0]).join(','),
+    };
   });
-  check('––', 'AutoFill überspringt ausgefilterte Zeilen', autofill, 'im Gegensatz zur Entf-Taste (Befund 01)');
+  check('––', 'AutoFill überspringt ausgefilterte Zeilen', autofill.ausgefiltertIntakt && autofill.gefuellt,
+    `Werte danach: ${autofill.werte} (ausgefilterte 99 intakt, sichtbare fortgeschrieben)`);
+}
+
+/* ---------- Bedienung mit echter Maus (prüft Delegation + Positionsmodell) ---------- */
+{
+  await page.evaluate(() => loadCSVText('P,Q,R\nA,1,x\nB,2,y\nC,3,z\nD,4,w', 'maus.csv', 0));
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+  await page.click('.gcell[data-r="1"][data-c="1"]');
+  const aktiv = await page.evaluate(() => `${appState.active.r},${appState.active.c}`);
+  check('––', 'Klick wählt die angeklickte Zelle', aktiv === '1,1', `aktiv: ${aktiv}`);
+
+  const von = await page.locator('.gcell[data-r="0"][data-c="0"]').boundingBox();
+  const bis = await page.locator('.gcell[data-r="3"][data-c="2"]').boundingBox();
+  await page.mouse.move(von.x + 5, von.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(bis.x + 5, bis.y + 5, { steps: 12 });
+  await page.mouse.up();
+  const gezogen = await page.evaluate(() => `${selectedVisibleRows().join(',')} / ${selectedVisibleCols().join(',')}`);
+  check('––', 'Ziehen mit der Maus spannt die Auswahl auf', gezogen === '0,1,2,3 / 0,1,2',
+    `Zeilen/Spalten: ${gezogen}`);
+
+  await page.dblclick('.gcell[data-r="2"][data-c="0"]');
+  const editorOffen = await page.locator('.gcell.editing .editor').count();
+  check('––', 'Doppelklick öffnet den Zelleditor', editorOffen === 1, `${editorOffen} Editor(en) offen`);
+  await page.keyboard.press('Escape');
+
+  await page.click('.gcell[data-r="0"][data-c="0"]', { button: 'right' });
+  const menue = await page.locator('.ctx-menu').count();
+  check('––', 'Rechtsklick öffnet das Kontextmenü', menue === 1, `${menue} Menü(s)`);
+  await page.keyboard.press('Escape');
 }
 
 await close();
